@@ -112,14 +112,37 @@ public class RouteSelectionTests : IDisposable
     }
 
     [Fact]
-    public void AutoSplitCountReflectsHowManySplitsHaveKnownFlags()
+    public void EveryBuiltInSplitCanAutoAdvance()
     {
-        // The demo route's ids match the fake script, so all three auto-advance.
-        Assert.Equal(3, BuiltInRoutes.Demo.AutoSplitCount);
+        foreach (var route in BuiltInRoutes.All)
+        {
+            Assert.Equal(route.Splits.Count, route.AutoSplitCount);
 
-        // The main-game route mostly does not, which is why it warns.
-        Assert.False(BuiltInRoutes.AllBosses.FlagsVerified);
-        Assert.True(BuiltInRoutes.AllBosses.AutoSplitCount < BuiltInRoutes.AllBosses.Splits.Count);
+            // Sourced, but not yet seen flipping on a live game.
+            Assert.False(route.FlagsVerified);
+        }
+    }
+
+    [Fact]
+    public void TheDlcRouteExtendsTheMainGameAndStillEndsAtTheKiln()
+    {
+        var main = BuiltInRoutes.AllBosses.Splits;
+        var dlc = BuiltInRoutes.AllBossesWithDlc.Splits;
+
+        Assert.True(dlc.Count > main.Count);
+        Assert.Equal(main[^1].Name, dlc[^1].Name);      // Soul of Cinder last in both
+        Assert.Equal(main[0].Name, dlc[0].Name);
+    }
+
+    [Fact]
+    public void BossFlagIdsAreUnique()
+    {
+        // A duplicated id would silently split the wrong boss.
+        foreach (var route in BuiltInRoutes.All)
+        {
+            var ids = route.Splits.Where(s => s.DefeatFlagId is not null).Select(s => s.DefeatFlagId!.Value);
+            Assert.Equal(route.Splits.Count, ids.Distinct().Count());
+        }
     }
 
     // --- selection ---

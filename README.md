@@ -50,6 +50,8 @@ is not on the critical path.)
 - **Host** (`src/Host`) — ASP.NET Core. Polls the game, runs the tracker, serves
   the overlay and streams state over Server-Sent Events on loopback.
 - **Spike** (`src/Spike`) — Milestone 1 console app that streams live values.
+- Overlay and control pages are embedded in the assembly, so a published build
+  is a single executable rather than an exe plus a folder of loose assets.
 - **Tests** (`tests/Engine.Tests`) — tracker logic, resume behaviour, personal
   bests, all driven from synthetic snapshots.
 
@@ -69,16 +71,30 @@ III; the overlay is a separate page that OBS composites on top when recording.
 If you want it on your own screen while playing, put it in a browser window on a
 second monitor, or wait for the optional desktop-window mode.
 
+## Getting it
+
+Build a standalone executable — one file, no .NET install needed on the machine
+that runs it:
+
+```powershell
+./scripts/publish.ps1
+```
+
+That produces `publish/OverlayMod.exe` (~180 MB, because the runtime is bundled).
+Run it and OverlayMod appears in the notification area; right-click for the
+overlay and control-panel links, the data folder, and the log. Routes, history
+and settings are written to an `appdata` folder beside the executable.
+
+For development, `dotnet run --project src/Host` keeps a console and prints its
+logs there instead.
+
 ## Playing a tracked run
 
 1. **Launch Dark Souls III offline with EAC disabled.** Non-negotiable — see the
    warning above. Steam can be running; Steam's offline mode is fine.
-2. **Start the host:**
-   ```powershell
-   dotnet run --project src/Host
-   ```
-   Order does not matter. The host retries attaching once a second, and picks
-   the game up whenever it appears.
+2. **Start OverlayMod** (`OverlayMod.exe`, or `dotnet run --project src/Host`).
+   Order does not matter. It retries attaching once a second and picks the game
+   up whenever it appears.
 3. **Pick what you're running** at <http://127.0.0.1:8777/control/> — the
    challenge (No-Hit, Deathless, Any%, All Bosses) and the route. The choice is
    remembered for next time.
@@ -114,6 +130,7 @@ dotnet run --project src/Host -- --fake
 | `--port <n>` | Port to listen on (default 8777) |
 | `--data <dir>` | Routes, history and checkpoints (default `./appdata`) |
 | `--no-hotkeys` | Do not register global hotkeys |
+| `--no-tray` | Do not show a notification-area icon |
 | `?theme=<name>` | Overlay URL option: `minimal` or `light` |
 | `?scale=<n>` | Overlay URL option: scale the overlay, e.g. `1.5` |
 
@@ -137,11 +154,15 @@ edited. Add or reorder splits, then hit **Reload from disk** on the control page
 A split carries the boss-defeat event flag that auto-advances it; a split with no
 flag has to be advanced manually with the **Split** button.
 
-> ⚠️ **Auto-splitting is mostly unconfirmed.** Only Iudex Gundyr's and the
-> Nameless King's flag ids come from a known-good source. The rest are left empty
-> rather than guessed, because a wrong id fails silently. The control page tells
-> you how many splits in a route can actually auto-advance. Confirming the others
-> against a live game is Milestone 5.
+Three routes ship: **All Bosses (main game)**, **All Bosses (with DLC)** and a
+**Demo** route used by `--fake`. Every boss carries its defeat flag, so all
+splits can auto-advance.
+
+> ⚠️ **Auto-splitting has not been confirmed on a live game yet.** The flag ids
+> are the game's own constants and cross-check against the two values already
+> known, but nobody has watched them flip in a real run. Until that happens,
+> keep an eye on whether splits land where they should — and the **Split** hotkey
+> is there if one does not.
 
 ## Build & run the spike
 

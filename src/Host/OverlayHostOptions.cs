@@ -12,8 +12,15 @@ public sealed class OverlayHostOptions
     /// <summary>Drive from the scripted demo run instead of a live game.</summary>
     public bool UseFake { get; init; }
 
-    /// <summary>Where run history and the in-progress run checkpoint are kept.</summary>
-    public string DataDirectory { get; init; } = "appdata";
+    /// <summary>
+    /// Where routes, run history, settings and the log are kept. Defaults to a
+    /// folder beside the executable rather than one relative to the working
+    /// directory, so a shortcut or a Start Menu launch still finds the same data.
+    /// </summary>
+    public string DataDirectory { get; init; } = DefaultDataDirectory;
+
+    public static string DefaultDataDirectory { get; } =
+        Path.Combine(AppContext.BaseDirectory, "appdata");
 
     /// <summary>Skip registering global hotkeys, whatever the config file says.</summary>
     public bool NoHotkeys { get; init; }
@@ -30,6 +37,11 @@ public sealed class OverlayHostOptions
 
     public string HotkeysPath => Path.Combine(DataDirectory, "hotkeys.json");
 
+    public string LogPath => Path.Combine(DataDirectory, "overlaymod.log");
+
+    /// <summary>Run without the notification-area icon.</summary>
+    public bool NoTray { get; init; }
+
     public string ControlUrl => $"http://127.0.0.1:{Port}/control/";
 
     public static OverlayHostOptions Parse(string[] args)
@@ -37,8 +49,9 @@ public sealed class OverlayHostOptions
         var port = 8777;
         var pollHz = 30;
         var fake = false;
-        var dataDirectory = "appdata";
+        var dataDirectory = DefaultDataDirectory;
         var noHotkeys = false;
+        var noTray = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -62,6 +75,9 @@ public sealed class OverlayHostOptions
                 case "--no-hotkeys":
                     noHotkeys = true;
                     break;
+                case "--no-tray":
+                    noTray = true;
+                    break;
                 case "--help" or "-h":
                     PrintUsage();
                     Environment.Exit(0);
@@ -76,6 +92,7 @@ public sealed class OverlayHostOptions
             UseFake = fake,
             DataDirectory = dataDirectory,
             NoHotkeys = noHotkeys,
+            NoTray = noTray,
         };
     }
 
@@ -86,8 +103,9 @@ public sealed class OverlayHostOptions
           --fake           Replay the scripted demo run; no game needed.
           --port <n>       Port to listen on (default 8777).
           --poll-hz <n>    Engine poll rate, 1-120 (default 30).
-          --data <dir>     Run history and checkpoints (default ./appdata).
+          --data <dir>     Routes, history and log (default: appdata beside the exe).
           --no-hotkeys     Do not register global hotkeys.
+          --no-tray        Do not show a notification-area icon.
           --help           Show this message.
         """);
 }

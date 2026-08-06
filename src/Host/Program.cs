@@ -1,8 +1,12 @@
+using System.Reflection;
+using Microsoft.Extensions.FileProviders;
 using OverlayMod.Engine.GameState;
 using OverlayMod.Engine.Persistence;
 using OverlayMod.Engine.Tracking;
 using OverlayMod.Host;
 using OverlayMod.Host.Hotkeys;
+using OverlayMod.Host.Logging;
+using OverlayMod.Host.Tray;
 
 // The overlay host: polls the game (or a scripted fake), runs the tracker, and
 // serves both the overlay page and a live state stream on loopback. OBS points a
@@ -14,6 +18,9 @@ var builder = WebApplication.CreateBuilder();
 builder.WebHost.UseUrls($"http://127.0.0.1:{options.Port}");
 builder.Logging.ClearProviders();
 builder.Logging.AddSimpleConsole(o => o.SingleLine = true);
+// The published build is windowed and has no console, so the file is the only
+// place a failure to attach or a bad route file will ever show up.
+builder.Logging.AddProvider(new FileLoggerProvider(options.LogPath));
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 
@@ -35,8 +42,23 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<HotkeyService>());
 
 var app = builder.Build();
 
-app.UseDefaultFiles();  // maps /overlay/ to /overlay/index.html
-app.UseStaticFiles();
+// Pages are embedded in the assembly. During development the physical wwwroot is
+// layered in front, so editing a stylesheet needs only a browser refresh; in a
+// published build that folder does not exist and the embedded copy serves.
+var embedded = new ManifestEmbeddedFileProvider(Assembly.GetExecutingAssembly(), "wwwroot");
+var physical = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+var developmentRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot"));
+
+IFileProvider pages = embedded;
+foreach (var candidate in new[] { physical, developmentRoot })
+{
+    if (!Directory.Exists(candidate)) continue;
+    pages = new CompositeFileProvider(new PhysicalFileProvider(candidate), pages);
+    break;
+}
+
+app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = pages });  // /overlay/ -> /overlay/index.html
+app.UseStaticFiles(new StaticFileOptions { FileProvider = pages });
 
 app.MapGet("/", () => Results.Redirect("/overlay/"));
 
@@ -151,7 +173,8 @@ run.MapPost("/reset", (RunController rc) => { rc.Reset(); return Results.Ok(new 
 
 var source = app.Services.GetRequiredService<ISnapshotSource>();
 var selected = app.Services.GetRequiredService<RunController>().Current;
-Console.WriteLine($"""
+
+var banner = $"""
 
     OverlayMod host
       source   : {source.Description}
@@ -160,13 +183,33 @@ Console.WriteLine($"""
       overlay  : {options.OverlayUrl}
       control  : {options.ControlUrl}
       data     : {Path.GetFullPath(options.DataDirectory)}
+      log      : {Path.GetFullPath(options.LogPath)}
 
     Open the control URL to pick a route and challenge.
-    Point an OBS Browser Source at the overlay URL. Ctrl+C to stop.
+    Point an OBS Browser Source at the overlay URL.
 
-    """);
+    """;
 
-app.Run();
+Console.WriteLine(banner);
+app.Services.GetRequiredService<ILogger<Program>>().LogInformation("Started. {Banner}", banner);
+
+// The tray icon owns its own thread; the web host keeps this one. Exit from the
+// tray asks the host to stop, which lets app.Run() return and unwind normally.
+TrayIcon? tray = null;
+if (!options.NoTray && OperatingSystem.IsWindows())
+{
+    var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+    tray = TrayIcon.Start(options, () => lifetime.StopApplication());
+}
+
+try
+{
+    app.Run();
+}
+finally
+{
+    tray?.Dispose();
+}
 
 /// <summary>Body of a route-selection request.</summary>
 internal sealed record SelectRequest(string Route, string Challenge);

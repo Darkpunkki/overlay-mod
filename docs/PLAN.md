@@ -52,9 +52,9 @@ itself. Measured honestly against each:
 **Essentially done.** The control page picks route and challenge, the choice
 persists, and the host runs happily before the game exists.
 
-- [ ] **Packaging.** Starting it means `dotnet run` from a terminal, which is a
-      developer workflow, not a product. Needs a self-contained exe and a tray
-      icon. *(Milestone 7)*
+- [x] **Packaging.** `scripts/publish.ps1` builds a single self-contained
+      `OverlayMod.exe` with a notification-area icon, a file log, and pages
+      embedded in the assembly so there is no loose asset folder to lose.
 - [ ] Route editor, so custom routes do not mean hand-editing JSON. *Optional.*
 
 ### 2. Complete visuals, differing per challenge
@@ -82,8 +82,8 @@ persists, and the host runs happily before the game exists.
 
 ### 4. The project's other stated goals
 
-- [ ] **Auto-splitting is unproven**, and 17 of 19 bosses have no known flag id,
-      so they split manually. *(needs the game — see below)*
+- [ ] **Auto-splitting is unproven** on a live game, though every boss now
+      carries a flag id. *(needs the game — see below)*
 - [x] **Global hotkeys.** `Ctrl+Alt+S/D/R` for start, split and reset, bound via
       `RegisterHotKey` on a dedicated message-pump thread. Configurable in
       `appdata/hotkeys.json`, disableable with `--no-hotkeys`, and shown on the
@@ -98,8 +98,8 @@ persists, and the host runs happily before the game exists.
 
 ### Shortest path to a usable product
 
-Packaging, then one session with the game to fill in the flag ids. Everything
-else is refinement.
+One session with the game, working through the verification table below.
+Everything that can be built without it has been.
 
 ## Pending live verification
 
@@ -113,7 +113,7 @@ work that does not touch it.
 | 1 | **Event-flag reads** | Load a save past Iudex Gundyr; the spike's `IudexGundyr` column should read `DEAD` | All auto-splitting depends on it |
 | 2 | **IGT persists across a restart** | Note IGT, quit to desktop, relaunch, load in; IGT should resume at or above the noted value | The entire resume-a-run feature rests on this |
 | 3 | **IGT at the main menu** | Watch the spike's IGT while sitting at the menu | The tracker assumes menu IGT is meaningless and ignores it; if it reads as a huge or negative value the resume comparison needs a guard |
-| 4 | **Boss-defeat flag ids** | `GET /api/flags?ids=13000800,13100800,…` while killing a boss; whichever flips is that boss's id | Only Iudex (`14000800`) and the Nameless King (`13200850`) are known. Every other split in the All Bosses route is manual until this is done |
+| 4 | **Boss-defeat flag ids** | Kill any boss and watch its split advance, or `GET /api/flags?ids=…` to check one directly | All 25 ids are now filled in from the published table, and the two already known match it — but none have been seen flipping in a real run |
 | 5 | **Player-loaded timing** | Watch when `player` flips true relative to regaining control | Decides whether runs start slightly early, during the fade-in |
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
 

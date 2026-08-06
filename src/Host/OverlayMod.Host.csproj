@@ -2,6 +2,28 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Engine\OverlayMod.Engine.csproj" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="8.0.10" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+    <!-- Nothing here is hosted under IIS, so the generated web.config is noise. -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bake the overlay and control pages into the assembly so the published
+         build really is one file, rather than an exe plus a folder of assets
+         that can be separated from it. In development the physical folder is
+         layered on top, so editing a stylesheet still only needs a refresh. -->
+    <Content Remove="wwwroot\**" />
+    <EmbeddedResource Include="wwwroot\**" />
+
+    <!-- Never publish a developer's own run history, settings or routes. The Web
+         SDK would otherwise treat this as content just because it sits in the
+         project folder. -->
+    <Content Remove="appdata\**" />
+    <None Remove="appdata\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -12,12 +34,24 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Windows-targeted: it reads a Windows game, registers Win32 hotkeys, and
+         puts an icon in the Windows notification area. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>OverlayMod.Host</RootNamespace>
     <!-- Reads a 64-bit game process via the Engine, so must itself be 64-bit. -->
     <PlatformTarget>x64</PlatformTarget>
+
+    <!-- Development keeps a console so logs are visible while iterating; the
+         published build is windowed and lives in the tray instead. -->
+    <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
+    <OutputType Condition="'$(Configuration)' != 'Release'">Exe</OutputType>
+
+    <AssemblyName>OverlayMod</AssemblyName>
+    <Product>OverlayMod</Product>
+    <Description>Dark Souls III run tracker and overlay</Description>
   </PropertyGroup>
 
 </Project>
