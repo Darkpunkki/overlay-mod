@@ -77,6 +77,10 @@ before Milestone 5.
 
 ## Milestones
 
+The list below is the roadmap — *what* gets built, in what order. For the
+*how* — designs, file layouts, the engine↔overlay data contract and task
+checklists — see **[docs/PLAN.md](docs/PLAN.md)**.
+
 1. **Memory spike** ✅ — attach + read IGT, loading, player-loaded, position, HP.
    Verified against the live game.
 2. **Engine core** ✅ — `GameSnapshot` + `RunTracker` state machine: IGT-delta
