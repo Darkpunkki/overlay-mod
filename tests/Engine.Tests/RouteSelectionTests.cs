@@ -46,6 +46,12 @@ public class RouteSelectionTests : IDisposable
         MaxHp = 1000,
     };
 
+    /// <summary>Hold a reading long enough to clear the controller's settle window.</summary>
+    private static void Settle(RunController c, GameSnapshot s, IFlagSource flags)
+    {
+        for (var i = 0; i < 25; i++) c.Tick(s, flags, 0);
+    }
+
     private RunController NewController() => new(
         new NoRecords(),
         new RunStateStore(Path.Combine(_dir, "run-state.json")),
@@ -242,11 +248,11 @@ public class RouteSelectionTests : IDisposable
     {
         var c = NewController();
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
-        c.Tick(Play(10_000, 1000), new NoFlags(), 0);
+        Settle(c, Play(600_000, 1000), new NoFlags());
 
         // The payload shape must not change with the profile, so switching
         // challenge never needs a different client.
-        var split = c.Project(Play(10_000, 1000)).Splits[0];
+        var split = c.Project(Play(600_000, 1000)).Splits[0];
         Assert.Null(split.PbHits);
         Assert.Null(split.PbDeaths);
         Assert.Null(split.PbIgtMs);
@@ -259,9 +265,9 @@ public class RouteSelectionTests : IDisposable
         var flags = new NoFlags();
 
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
-        c.Tick(Play(10_000, 1000), flags, 0);
-        c.Tick(Play(11_000, 900), flags, 0);       // a hit on the old route
-        Assert.Equal(1, c.Project(Play(11_000, 900)).TotalHits);
+        Settle(c, Play(600_000, 1000), flags);
+        c.Tick(Play(601_000, 900), flags, 0);      // a hit on the old route
+        Assert.Equal(1, c.Project(Play(601_000, 900)).TotalHits);
 
         c.Select(BuiltInRoutes.AllBosses.Name, ChallengeType.NoHit);
 
@@ -277,8 +283,8 @@ public class RouteSelectionTests : IDisposable
         var flags = new NoFlags();
 
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
-        c.Tick(Play(10_000, 1000), flags, 0);
-        c.Tick(Play(11_000, 900), flags, 0);
+        Settle(c, Play(600_000, 1000), flags);
+        c.Tick(Play(601_000, 900), flags, 0);
 
         // The thing being measured changed, so the numbers so far mean nothing.
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.AnyPercent);

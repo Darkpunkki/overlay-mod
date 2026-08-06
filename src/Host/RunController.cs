@@ -14,6 +14,32 @@ public sealed class RunController
     /// <summary>How often an in-progress run is checkpointed to disk.</summary>
     private static readonly TimeSpan CheckpointInterval = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// Readings to discard after loading into the world before judging whether the
+    /// run continues. Immediately after a load the game has not necessarily
+    /// populated in-game time yet, and a transient zero read at that moment is
+    /// indistinguishable from a brand new character.
+    /// </summary>
+    private const int SettleTicks = 20;
+
+    /// <summary>
+    /// How far in-game time may go backwards and still count as the same run.
+    ///
+    /// Dark Souls III writes in-game time into the save periodically rather than
+    /// continuously, so reloading rewinds the clock to the last save point. A
+    /// strict "must not go backwards" rule therefore threw away a perfectly good
+    /// run every time the player quit to the menu and carried on.
+    /// </summary>
+    private const int ResumeRewindToleranceMs = 5 * 60 * 1000;
+
+    /// <summary>
+    /// Below this, a save looks like a character that has barely been played.
+    /// Used so that loading a fresh character mid-session is still recognised as a
+    /// new run even when the previous run was short enough to fall inside the
+    /// rewind tolerance.
+    /// </summary>
+    private const int FreshCharacterIgtMs = 60 * 1000;
+
     private readonly object _gate = new();
     private readonly RunTracker _tracker = new();
     private readonly IRecordStore _records;
@@ -31,6 +57,7 @@ public sealed class RunController
     private bool _awaitingResumeDecision = true;
 
     private int _lastGeneration = -1;
+    private int _settleTicks;
 
     private DateTime _lastCheckpoint = DateTime.MinValue;
 
@@ -118,9 +145,11 @@ public sealed class RunController
     /// part of it.
     ///
     /// Quitting the game does not end a run. Dark Souls III keeps in-game time in
-    /// the save, so on returning we compare the save's IGT against the last value
-    /// we saw: at or ahead of it means the same character carrying on, and the run
-    /// resumes. Behind it means a different or fresh character, and a new run starts.
+    /// the save, so on returning we compare the save's clock against the last
+    /// reading we trusted. It is allowed to have gone backwards a little — the
+    /// game saves periodically rather than continuously, so reloading rewinds to
+    /// the last save point — but a save that has barely been played, or one far
+    /// behind, is a different character and starts a new run.
     /// </summary>
     public void Tick(GameSnapshot snapshot, IFlagSource flags, int generation)
     {
@@ -158,12 +187,19 @@ public sealed class RunController
                 // and starting a new character keeps the same process, so
                 // without this the old run simply carried on with its hits.
                 _awaitingResumeDecision = true;
+                _settleTicks = 0;
                 return;
             }
 
             if (_awaitingResumeDecision)
             {
+                // Let readings settle before judging. Acting on the first frame
+                // after a load risks reading in-game time before the game has
+                // written it, which looks exactly like a brand new character.
+                if (++_settleTicks < SettleTicks) return;
+
                 _awaitingResumeDecision = false;
+                _settleTicks = 0;
                 ResolveResume(snapshot);
             }
 
@@ -194,18 +230,25 @@ public sealed class RunController
 
         if (_tracker.Phase != RunPhase.Running) return;
 
-        if (snapshot.IgtMs >= _tracker.CurrentIgt)
-        {
-            _log.LogInformation(
-                "Resuming run at split {Index}; in-game time picked up at {Igt}ms.",
-                _tracker.ActiveIndex, snapshot.IgtMs);
-            return;
-        }
+        // How far the save's clock sits behind the last reading we trusted.
+        // Negative means it moved forward, which is the ordinary case.
+        var rewindMs = _tracker.CurrentIgt - snapshot.IgtMs;
+
+        // A save that has barely been played is a different character, not the
+        // same one rewound — this catches the case where the previous run was
+        // short enough that the rewind tolerance alone would not notice.
+        var freshCharacter = snapshot.IgtMs < FreshCharacterIgtMs && _tracker.CurrentIgt >= FreshCharacterIgtMs;
+        var sameRun = !freshCharacter && rewindMs <= ResumeRewindToleranceMs;
 
         _log.LogInformation(
-            "In-game time went backwards ({Igt}ms < {Last}ms) - treating this as a new run.",
-            snapshot.IgtMs, _tracker.CurrentIgt);
-        StartNew(snapshot);
+            "Back in play: save IGT {Igt}ms, last seen {Last}ms, rewind {Rewind}ms -> {Decision}.",
+            snapshot.IgtMs, _tracker.CurrentIgt, rewindMs, sameRun ? "resuming this run" : "starting a new run");
+
+        // Nothing to adjust when resuming: the run timer is an in-game-time
+        // difference, so if the save rewound to its last save point the timer
+        // rewinds with it. That is the honest reading — the player really did
+        // lose that progress and will replay it.
+        if (!sameRun) StartNew(snapshot);
     }
 
     private void StartNew(GameSnapshot snapshot)

@@ -131,16 +131,19 @@ second of the death.
 All 25 boss flag ids are filled in from a published table, and the two that were
 already known match it — but **none have been seen flipping in a real run**.
 
-If a split does not fire, check the flag directly. With the boss dead, open:
+If a split does not fire, open the diagnostic with the boss dead:
 
 ```
-http://127.0.0.1:8777/api/flags?ids=14000800
+http://127.0.0.1:8777/api/diagnostics?flag=14000800
 ```
 
-Substitute the id for the boss you killed (they are in
-`appdata/routes/all-bosses-main-game.json`). `true` means the read works and
-something else is wrong; `false` means either the id or the flag-reading code is
-wrong. Either way, tell me which boss and which answer.
+Substitute the id for the boss you killed (they are in the route files under
+`appdata/routes/`). The `flag` section reports every step of the lookup and, if
+it gave up, a `failedAt` naming the step that did. **Paste that whole response
+back** — it says far more than a true/false ever could.
+
+The flag lookup walks a chain of pointers through structures whose layout was
+reverse-engineered, so "which hop broke" is the only question worth asking.
 
 You can always advance manually with **Ctrl+Alt+D**.
 
@@ -152,10 +155,21 @@ You can always advance manually with **Ctrl+Alt+D**.
 4. The run should **resume** — same hit count, timer continuing from where it
    stopped, not restarted.
 
-This rests on an assumption I could not test without the game: that DS3 stores
-in-game time in the save, so it resumes at or above where it left off. If instead
-you get a brand-new run with zero hits, that assumption is wrong and I need to
-know.
+Then the same test **quitting only to the main menu** and continuing the same
+character — that should also resume. And the opposite: quit to the menu and start
+a **new character**, which *should* give a fresh run at zero.
+
+The subtlety is that in-game time is written to the save periodically rather than
+continuously, so reloading rewinds it to the last save point. The rule tolerates
+a rewind of up to five minutes while still treating a barely-played save as a new
+character. Every decision is logged with the actual numbers:
+
+```
+Back in play: save IGT 1234567ms, last seen 1240000ms, rewind 5433ms -> resuming this run
+```
+
+If a run is dropped when it should have resumed, or kept when it should have
+restarted, that line from `appdata/overlaymod.log` is exactly what I need.
 
 ### 4.6 — Deaths
 

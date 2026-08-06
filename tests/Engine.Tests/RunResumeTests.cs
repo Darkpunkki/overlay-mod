@@ -8,9 +8,16 @@ using Xunit;
 namespace OverlayMod.Engine.Tests;
 
 /// <summary>
-/// Quitting the game to take a break must not destroy a run. Dark Souls III
-/// keeps in-game time in the save, so returning with IGT at or ahead of where we
-/// left off means the same character carrying on.
+/// Quitting the game — to the menu or to the desktop — must not destroy a run.
+///
+/// Dark Souls III keeps in-game time in the save, but writes it periodically
+/// rather than continuously, so reloading rewinds the clock to the last save
+/// point. The rule therefore cannot be "time must never go backwards": it has to
+/// tolerate a rewind while still recognising a different character.
+///
+/// In-game times here are realistic — a run twenty minutes in — because the
+/// distinction between "rewound to the last save" and "a fresh character" only
+/// exists at that scale.
 /// </summary>
 public class RunResumeTests : IDisposable
 {
@@ -22,6 +29,8 @@ public class RunResumeTests : IDisposable
     }
 
     // --- helpers ---
+
+    private const int TwentyMinutes = 20 * 60 * 1000;
 
     private static GameSnapshot Play(int igt, int hp) => new()
     {
@@ -68,6 +77,16 @@ public class RunResumeTests : IDisposable
         new SettingsStore(Path.Combine(_dir, "settings.json")),
         NullLogger<RunController>.Instance);
 
+    /// <summary>
+    /// Hold a reading long enough to clear the settle window the controller waits
+    /// out after loading in, so it judges a stable value rather than whatever the
+    /// game had written on the first frame.
+    /// </summary>
+    private static void Settle(RunController c, GameSnapshot s, IFlagSource flags, int generation = 0)
+    {
+        for (var i = 0; i < 25; i++) c.Tick(s, flags, generation);
+    }
+
     private static int HitsOf(RunController c, GameSnapshot s) => c.Project(s).TotalHits;
 
     // --- starting ---
@@ -76,10 +95,7 @@ public class RunResumeTests : IDisposable
     public void RunDoesNotStartWhileSittingInMenus()
     {
         var c = NewController();
-        var flags = new NoFlags();
-
-        c.Tick(Menu(0), flags, generation: 0);
-        c.Tick(Menu(0), flags, generation: 0);
+        Settle(c, Menu(0), new NoFlags());
 
         Assert.Equal("NotStarted", c.Project(Menu(0)).Phase);
     }
@@ -91,33 +107,68 @@ public class RunResumeTests : IDisposable
         var flags = new NoFlags();
 
         c.Tick(Menu(0), flags, 0);
-        c.Tick(Play(10_000, 1000), flags, 0);
+        Settle(c, Play(TwentyMinutes, 1000), flags);
 
-        Assert.Equal("Running", c.Project(Play(10_000, 1000)).Phase);
+        Assert.Equal("Running", c.Project(Play(TwentyMinutes, 1000)).Phase);
     }
 
     // --- resuming ---
 
     [Fact]
-    public void QuittingAndReturningWithLaterIgtResumesTheSameRun()
+    public void QuittingToTheMenuAndContinuingTheSameCharacterKeepsTheRun()
     {
         var c = NewController();
         var flags = new NoFlags();
 
-        c.Tick(Play(10_000, 1000), flags, 0);
-        c.Tick(Play(11_000, 900), flags, 0);   // one hit
-        Assert.Equal(1, HitsOf(c, Play(11_000, 900)));
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);      // a hit
+        Assert.Equal(1, HitsOf(c, Play(TwentyMinutes + 1_000, 900)));
 
-        // Player quits to desktop.
+        c.Tick(Menu(TwentyMinutes + 1_000), flags, 0);
+        Settle(c, Play(TwentyMinutes + 1_000, 1000), flags);
+
+        Assert.Equal(1, HitsOf(c, Play(TwentyMinutes + 1_000, 1000)));
+    }
+
+    [Fact]
+    public void ASaveRewoundToItsLastSavePointStillResumes()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 60_000, 900), flags, 0);     // a hit, a minute later
+        Assert.Equal(1, HitsOf(c, Play(TwentyMinutes + 60_000, 900)));
+
+        c.Tick(Menu(TwentyMinutes + 60_000), flags, 0);
+
+        // The save had not caught up: reloading rewinds ninety seconds. That is
+        // the same character carrying on, not a new run.
+        Settle(c, Play(TwentyMinutes - 30_000, 1000), flags);
+
+        var state = c.Project(Play(TwentyMinutes - 30_000, 1000));
+        Assert.Equal("Running", state.Phase);
+        Assert.Equal(1, state.TotalHits);
+    }
+
+    [Fact]
+    public void QuittingToDesktopAndReturningResumesTheSameRun()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);
+        Assert.Equal(1, HitsOf(c, Play(TwentyMinutes + 1_000, 900)));
+
         c.Tick(GameSnapshot.Detached, flags, 0);
         c.Tick(GameSnapshot.Detached, flags, 0);
 
-        // ...and comes back later. New process, so a new source generation, and
-        // the save resumes at the in-game time it was left at.
+        // Relaunched: a new process, so a new source generation.
         c.Tick(Menu(0), flags, 1);
-        c.Tick(Play(11_000, 1000), flags, 1);
+        Settle(c, Play(TwentyMinutes + 1_000, 1000), flags, 1);
 
-        var state = c.Project(Play(11_000, 1000));
+        var state = c.Project(Play(TwentyMinutes + 1_000, 1000));
         Assert.Equal("Running", state.Phase);
         Assert.Equal(1, state.TotalHits);
     }
@@ -128,78 +179,19 @@ public class RunResumeTests : IDisposable
         var c = NewController();
         var flags = new NoFlags();
 
-        c.Tick(Play(10_000, 1000), flags, 0);
-        c.Tick(Play(15_000, 1000), flags, 0);
-        var beforeQuit = c.Project(Play(15_000, 1000)).RunIgtMs;
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 5_000, 1000), flags, 0);
+        var beforeQuit = c.Project(Play(TwentyMinutes + 5_000, 1000)).RunIgtMs;
 
-        c.Tick(GameSnapshot.Detached, flags, 0);
         c.Tick(GameSnapshot.Detached, flags, 0);
 
         // The menu reports whatever it likes; it must not move the run clock.
-        c.Tick(Menu(999_999), flags, 1);
+        c.Tick(Menu(999_999_999), flags, 1);
 
         Assert.Equal(beforeQuit, c.Project(GameSnapshot.Detached).RunIgtMs);
     }
 
-    [Fact]
-    public void ReturningWithEarlierIgtStartsAFreshRun()
-    {
-        var c = NewController();
-        var flags = new NoFlags();
-
-        c.Tick(Play(50_000, 1000), flags, 0);
-        c.Tick(Play(51_000, 900), flags, 0);   // one hit
-        Assert.Equal(1, HitsOf(c, Play(51_000, 900)));
-
-        c.Tick(GameSnapshot.Detached, flags, 0);
-
-        // A different character: its save is far earlier in in-game time.
-        c.Tick(Play(500, 1000), flags, 1);
-
-        var state = c.Project(Play(500, 1000));
-        Assert.Equal("Running", state.Phase);
-        Assert.Equal(0, state.TotalHits);
-    }
-
-    [Fact]
-    public void ReloadingAtDifferentHealthIsNotCountedAsAHit()
-    {
-        var c = NewController();
-        var flags = new NoFlags();
-
-        c.Tick(Play(10_000, 1000), flags, 0);
-        c.Tick(Play(11_000, 1000), flags, 0);
-        Assert.Equal(0, HitsOf(c, Play(11_000, 1000)));
-
-        // Quit at full health, come back on a save with much less.
-        c.Tick(GameSnapshot.Detached, flags, 0);
-        c.Tick(Menu(0), flags, 1);
-        c.Tick(Play(11_000, 400), flags, 1);
-
-        Assert.Equal(0, HitsOf(c, Play(11_000, 400)));
-    }
-
-    [Fact]
-    public void ReturningAfterAFinishedRunBeginsANewAttempt()
-    {
-        var c = NewController();
-        var flags = new NoFlags();
-
-        c.Tick(Play(10_000, 1000), flags, 0);
-        c.Tick(Play(11_000, 900), flags, 0);   // one hit
-
-        // Finish the run by splitting through every boss.
-        for (var i = 0; i < 3; i++) c.Split();
-        Assert.Equal("Finished", c.Project(Play(11_000, 900)).Phase);
-
-        // Quit, come back, load in again: this is attempt two, not the old one.
-        c.Tick(GameSnapshot.Detached, flags, 0);
-        c.Tick(Play(12_000, 1000), flags, 1);
-
-        var state = c.Project(Play(12_000, 1000));
-        Assert.Equal("Running", state.Phase);
-        Assert.Equal(0, state.TotalHits);
-    }
+    // --- starting over ---
 
     [Fact]
     public void QuittingToTheMenuAndStartingANewCharacterBeginsANewRun()
@@ -207,17 +199,16 @@ public class RunResumeTests : IDisposable
         var c = NewController();
         var flags = new NoFlags();
 
-        c.Tick(Play(50_000, 1000), flags, 0);
-        c.Tick(Play(51_000, 900), flags, 0);       // a hit on the old run
-        Assert.Equal(1, HitsOf(c, Play(51_000, 900)));
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);      // a hit on the old run
+        Assert.Equal(1, HitsOf(c, Play(TwentyMinutes + 1_000, 900)));
 
         // Quit to the main menu *without closing the game*: same process, same
         // source generation, so nothing about the connection changes.
-        c.Tick(Menu(51_000), flags, 0);
-        c.Tick(Menu(51_000), flags, 0);
+        c.Tick(Menu(TwentyMinutes + 1_000), flags, 0);
 
-        // Start a new character - its in-game time begins near zero.
-        c.Tick(Play(800, 1000), flags, 0);
+        // A brand new character - its in-game time starts near zero.
+        Settle(c, Play(800, 1000), flags);
 
         var state = c.Project(Play(800, 1000));
         Assert.Equal("Running", state.Phase);
@@ -225,20 +216,21 @@ public class RunResumeTests : IDisposable
     }
 
     [Fact]
-    public void QuittingToTheMenuAndContinuingTheSameCharacterKeepsTheRun()
+    public void LoadingASaveFarBehindStartsANewRun()
     {
         var c = NewController();
         var flags = new NoFlags();
 
-        c.Tick(Play(50_000, 1000), flags, 0);
-        c.Tick(Play(51_000, 900), flags, 0);
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);
 
-        c.Tick(Menu(51_000), flags, 0);
+        c.Tick(GameSnapshot.Detached, flags, 0);
 
-        // Same save, so in-game time picks up where it stopped.
-        c.Tick(Play(51_000, 1000), flags, 0);
+        // A different character, ten minutes in: far further back than any
+        // rewind to a save point could explain.
+        Settle(c, Play(10 * 60 * 1000, 1000), flags, 1);
 
-        Assert.Equal(1, HitsOf(c, Play(51_000, 1000)));
+        Assert.Equal(0, HitsOf(c, Play(10 * 60 * 1000, 1000)));
     }
 
     [Fact]
@@ -247,17 +239,53 @@ public class RunResumeTests : IDisposable
         var c = NewController();
         var flags = new NoFlags();
 
-        c.Tick(Play(50_000, 1000), flags, 0);
-        c.Tick(Play(51_000, 900), flags, 0);
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);
 
         // A bonfire warp: out of play, then back, with time moving forward.
-        c.Tick(Loading(51_000), flags, 0);
-        c.Tick(Loading(51_000), flags, 0);
-        c.Tick(Play(51_500, 1000), flags, 0);
+        c.Tick(Loading(TwentyMinutes + 1_000), flags, 0);
+        c.Tick(Loading(TwentyMinutes + 1_000), flags, 0);
+        Settle(c, Play(TwentyMinutes + 1_500, 1000), flags);
 
-        var state = c.Project(Play(51_500, 1000));
+        var state = c.Project(Play(TwentyMinutes + 1_500, 1000));
         Assert.Equal("Running", state.Phase);
         Assert.Equal(1, state.TotalHits);
+    }
+
+    [Fact]
+    public void ReloadingAtDifferentHealthIsNotCountedAsAHit()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        Assert.Equal(0, HitsOf(c, Play(TwentyMinutes, 1000)));
+
+        // Quit at full health, come back on a save with much less.
+        c.Tick(Menu(TwentyMinutes), flags, 0);
+        Settle(c, Play(TwentyMinutes, 400), flags);
+
+        Assert.Equal(0, HitsOf(c, Play(TwentyMinutes, 400)));
+    }
+
+    [Fact]
+    public void ReturningAfterAFinishedRunBeginsANewAttempt()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);      // a hit
+
+        for (var i = 0; i < 3; i++) c.Split();
+        Assert.Equal("Finished", c.Project(Play(TwentyMinutes + 1_000, 900)).Phase);
+
+        c.Tick(GameSnapshot.Detached, flags, 0);
+        Settle(c, Play(TwentyMinutes + 2_000, 1000), flags, 1);
+
+        var state = c.Project(Play(TwentyMinutes + 2_000, 1000));
+        Assert.Equal("Running", state.Phase);
+        Assert.Equal(0, state.TotalHits);
     }
 
     // --- surviving a host restart ---
@@ -268,14 +296,14 @@ public class RunResumeTests : IDisposable
         var flags = new NoFlags();
 
         var first = NewController();
-        first.Tick(Play(10_000, 1000), flags, 0);
-        first.Tick(Play(11_000, 900), flags, 0);   // one hit, checkpointed
+        Settle(first, Play(TwentyMinutes, 1000), flags);
+        first.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);   // one hit, checkpointed
 
         // The overlay is closed and reopened; the game is still where it was.
         var second = NewController();
-        second.Tick(Play(11_000, 900), flags, 0);
+        Settle(second, Play(TwentyMinutes + 1_000, 900), flags);
 
-        var state = second.Project(Play(11_000, 900));
+        var state = second.Project(Play(TwentyMinutes + 1_000, 900));
         Assert.Equal("Running", state.Phase);
         Assert.Equal(1, state.TotalHits);
     }
@@ -286,8 +314,8 @@ public class RunResumeTests : IDisposable
         var flags = new NoFlags();
 
         var first = NewController();
-        first.Tick(Play(10_000, 1000), flags, 0);
-        first.Tick(Play(11_000, 900), flags, 0);
+        Settle(first, Play(TwentyMinutes, 1000), flags);
+        first.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);
         first.Reset();
 
         var second = NewController();

@@ -197,7 +197,19 @@ Decisions not yet made. Flagged here rather than silently assumed.
   re-attach: quitting to the main menu and starting a new character keeps the
   same process alive, and originally the old run simply carried on with its hits
   intact. Any transition out of play — menu, loading screen or quit — now re-runs
-  the in-game-time comparison on the way back in. Found in live testing.
+  the comparison on the way back in. Found in live testing.
+- **In-game time is allowed to go backwards a little.** The first version of that
+  comparison demanded the save's clock never regress, which threw away a good run
+  every time the player quit to the menu and continued — DS3 writes in-game time
+  to the save periodically, so reloading rewinds to the last save point. A rewind
+  within five minutes now counts as the same run; a save under a minute old
+  counts as a fresh character regardless. Also found in live testing.
+- **Readings are given time to settle after loading in.** The first frames after
+  a load can report in-game time the game has not written yet, and a transient
+  zero is indistinguishable from a new character. The resume decision waits.
+- **The run timer follows in-game time, including backwards.** If the save rewinds
+  to its last save point, the run timer rewinds with it. That is the honest
+  reading: the player really did lose that progress and will replay it.
 - **A run is never automatically failed.** A hit under No-Hit, or a death under
   Deathless, does not end the run — players want to finish an attempt even after
   it stops being a clean one, and the personal-best comparison is what tells them

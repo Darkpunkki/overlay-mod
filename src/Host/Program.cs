@@ -151,8 +151,7 @@ app.MapPost("/api/routes/restore", (RouteStore routes) =>
 });
 
 // Read arbitrary event flags. This exists for the live verification session:
-// boss-defeat flag ids are mostly unconfirmed, and watching candidates flip
-// while killing a boss is how they get confirmed.
+// watching candidates flip while killing a boss is how they get confirmed.
 app.MapGet("/api/flags", (string ids, ISnapshotSource source) =>
 {
     var result = new Dictionary<string, bool>();
@@ -160,6 +159,37 @@ app.MapGet("/api/flags", (string ids, ISnapshotSource source) =>
         if (uint.TryParse(part, out var id)) result[part] = source.Flags.IsEventFlagSet(id);
 
     return Results.Ok(new { attached = source.Attached, flags = result });
+});
+
+// Every intermediate value from a flag lookup, plus the resolved statics. When a
+// boss dies and the split does not advance, this says which pointer hop broke
+// rather than leaving it to guesswork.
+app.MapGet("/api/diagnostics", (ISnapshotSource source, uint? flag) =>
+{
+    if (source is not Ds3Reader reader)
+        return Results.Ok(new { note = "diagnostics need the live game reader", source = source.Description });
+
+    var snapshot = reader.TakeSnapshot();
+    return Results.Ok(new
+    {
+        source = reader.Description,
+        version = reader.Version.ToString(),
+        attached = reader.Attached,
+        snapshot = new
+        {
+            snapshot.IgtMs,
+            snapshot.IsLoading,
+            snapshot.PlayerLoaded,
+            snapshot.Hp,
+            snapshot.MaxHp,
+        },
+        pointers = new
+        {
+            worldChrMan = $"0x{reader.WorldChrMan:X}",
+            playerIns = $"0x{reader.PlayerInsAddress:X}",
+        },
+        flag = reader.DiagnoseFlag(flag ?? 14000800),
+    });
 });
 
 // What the global hotkeys ended up bound to, so the control page can show them

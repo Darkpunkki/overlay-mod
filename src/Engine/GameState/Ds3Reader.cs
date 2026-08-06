@@ -132,80 +132,133 @@ public sealed class Ds3Reader : ISnapshotSource, IFlagSource
     /// flag-lookup: decompose the id, resolve its storage "category" (via the
     /// FieldArea world-block tables for area-scoped flags), then index into the
     /// SprjEventFlagMan bit table. Boss-defeat ids come from the boss table
-    /// (e.g. Nameless King = 13200850). Needs a live sanity check before relying on it.
+    /// (e.g. Nameless King = 13200850).
     /// </summary>
-    public bool ReadEventFlag(uint id)
+    public bool ReadEventFlag(uint id) => DiagnoseFlag(id).IsSet;
+
+    /// <summary>
+    /// The flag lookup, reporting every intermediate value.
+    ///
+    /// The lookup is a chain of pointer hops through structures whose layout was
+    /// reverse-engineered, so when it returns the wrong answer the question is
+    /// always *which hop* broke. A plain bool cannot answer that;
+    /// <see cref="FlagLookup.FailedAt"/> can.
+    /// </summary>
+    public FlagLookup DiagnoseFlag(uint id)
     {
-        if (!Attached) return false;
+        var result = new FlagLookup { Id = id, Attached = Attached };
+        if (!Attached) return result with { FailedAt = "not attached to the game" };
+
         var mem = _mem!;
 
-        var a = (int)(id / 10000000 % 10);
-        var area = (int)(id / 100000 % 100);
-        var b = (int)(id / 10000 % 10);
-        var c = (int)(id / 1000 % 10);
+        result = result with
+        {
+            A = (int)(id / 10000000 % 10),
+            Area = (int)(id / 100000 % 100),
+            B = (int)(id / 10000 % 10),
+            C = (int)(id / 1000 % 10),
+            FieldAreaStatic = _fieldAreaStatic,
+            EventFlagManStatic = _eventFlagManStatic,
+        };
 
         var category = -1;
-        if (area >= 90 || area + b == 0)
+
+        if (result.Area >= 90 || result.Area + result.B == 0)
         {
+            // Global flags live in category zero and skip the world-block tables.
             category = 0;
         }
         else
         {
-            if (_fieldAreaStatic == 0) return false;
+            if (_fieldAreaStatic == 0)
+                return result with { FailedAt = "the FieldArea signature did not resolve at attach" };
+
             var fieldArea = mem.ReadInt64(_fieldAreaStatic);
-            if (fieldArea == 0) return false;
+            result = result with { FieldArea = fieldArea };
+            if (fieldArea == 0) return result with { FailedAt = "FieldArea instance pointer is null" };
 
             var worldInfoOwner = mem.ReadInt64(fieldArea + 0x10);
-            if (worldInfoOwner == 0) return false;
+            result = result with { WorldInfoOwner = worldInfoOwner };
+            if (worldInfoOwner == 0) return result with { FailedAt = "WorldInfoOwner is null (FieldArea+0x10)" };
 
             var size = mem.ReadInt32(worldInfoOwner + 0x8);
             var vector = mem.ReadInt64(worldInfoOwner + 0x10);
-            if (vector == 0) return false;
+            result = result with { WorldBlockCount = size, WorldBlockVector = vector };
+            if (vector == 0) return result with { FailedAt = "world-block vector is null (WorldInfoOwner+0x10)" };
+            if (size is <= 0 or > 4096)
+                return result with { FailedAt = $"world-block count looks wrong ({size}) - layout has probably changed" };
 
+            var matchedArea = false;
             for (var i = 0; i < size; i++)
             {
                 var entry = vector + (long)i * 0x38;
-                if (mem.ReadByte(entry + 0xb) != area) continue;
+                if (mem.ReadByte(entry + 0xb) != result.Area) continue;
 
+                matchedArea = true;
                 var count = mem.ReadByte(entry + 0x20);
+                result = result with { BlockCount = count };
+
                 if (count >= 1)
                 {
                     var blockBase = mem.ReadInt64(entry + 0x28);
+                    result = result with { BlockBase = blockBase };
+
                     var index = 0;
                     var found = false;
                     while (true)
                     {
                         var flag = mem.ReadInt32(blockBase + (long)index * 0x70 + 0x8);
-                        if (((flag >> 16) & 0xff) == b && (uint)flag >> 24 == (uint)area)
+                        if (((flag >> 16) & 0xff) == result.B && (uint)flag >> 24 == (uint)result.Area)
                         {
                             found = true;
                             break;
                         }
                         if (++index >= count) break;
                     }
-                    if (found)
-                        category = mem.ReadInt32(blockBase + (long)index * 0x70 + 0x20);
+
+                    if (found) category = mem.ReadInt32(blockBase + (long)index * 0x70 + 0x20);
+                    else return result with { FailedAt = "no world block matched this flag's area and block number" };
                 }
                 break; // matched the area entry; stop scanning
             }
 
+            if (!matchedArea)
+                return result with { FailedAt = $"no world-block entry for area {result.Area} (is that area loaded?)" };
+
             if (category > -1) category++;
         }
 
-        if (category < 0 || _eventFlagManStatic == 0) return false;
+        result = result with { Category = category };
+        if (category < 0) return result with { FailedAt = "could not resolve a storage category" };
+
+        if (_eventFlagManStatic == 0)
+            return result with { FailedAt = "the SprjEventFlagMan signature did not resolve at attach" };
 
         var eventFlagMan = mem.ReadInt64(_eventFlagManStatic);
-        if (eventFlagMan == 0) return false;
-        var table = mem.ReadInt64(eventFlagMan + 0x218);
-        if (table == 0) return false;
-        var bucket = mem.ReadInt64(table + (long)a * 0x18);
-        if (bucket == 0) return false;
+        result = result with { EventFlagMan = eventFlagMan };
+        if (eventFlagMan == 0) return result with { FailedAt = "SprjEventFlagMan instance pointer is null" };
 
-        var resultBase = ((long)c << 4) + bucket + (long)category * 0xa8;
+        var table = mem.ReadInt64(eventFlagMan + 0x218);
+        result = result with { Table = table };
+        if (table == 0) return result with { FailedAt = "flag table is null (SprjEventFlagMan+0x218)" };
+
+        var bucket = mem.ReadInt64(table + (long)result.A * 0x18);
+        result = result with { Bucket = bucket };
+        if (bucket == 0) return result with { FailedAt = $"bucket {result.A} is null" };
+
+        var resultBase = ((long)result.C << 4) + bucket + (long)category * 0xa8;
         var word = (int)((id % 1000) >> 5) * 4;
         var value = mem.ReadUInt32(resultBase + word);
         var bit = 0x1f - (int)(id % 1000 & 0x1f);
-        return (value & (1u << bit)) != 0;
+
+        return result with
+        {
+            ResultBase = resultBase,
+            WordOffset = word,
+            Word = value,
+            Bit = bit,
+            IsSet = (value & (1u << bit)) != 0,
+        };
     }
 
     public GameSnapshot TakeSnapshot()
