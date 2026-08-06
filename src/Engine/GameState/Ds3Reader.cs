@@ -246,17 +246,25 @@ public sealed class Ds3Reader : ISnapshotSource, IFlagSource
         result = result with { Bucket = bucket };
         if (bucket == 0) return result with { FailedAt = $"bucket {result.A} is null" };
 
-        var resultBase = ((long)result.C << 4) + bucket + (long)category * 0xa8;
+        // This address holds a *pointer* to the block of flag bits, not the bits
+        // themselves. Reading the word in place instead returns the upper half of
+        // that pointer — a value like 0x00007FF3 — which is both never the flag
+        // being asked about and occasionally non-zero in the bit being tested,
+        // so it reported some bosses dead that were alive.
+        var blockSlot = ((long)result.C << 4) + bucket + (long)category * 0xa8;
+        var block = mem.ReadInt64(blockSlot);
+        result = result with { ResultBase = blockSlot, FlagBlock = block };
+        if (block == 0) return result with { FailedAt = "flag block pointer is null" };
+
         var word = (int)((id % 1000) >> 5) * 4;
-        var value = mem.ReadUInt32(resultBase + word);
         var bit = 0x1f - (int)(id % 1000 & 0x1f);
+        var value = mem.ReadUInt32(block + word);
 
         return result with
         {
-            ResultBase = resultBase,
             WordOffset = word,
-            Word = value,
             Bit = bit,
+            Word = value,
             IsSet = (value & (1u << bit)) != 0,
         };
     }

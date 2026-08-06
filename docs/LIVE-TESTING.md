@@ -128,8 +128,15 @@ Then check the edges:
 Kill any boss. The overlay should advance to the next split on its own, within a
 second of the death.
 
-All 25 boss flag ids are filled in from a published table, and the two that were
-already known match it — but **none have been seen flipping in a real run**.
+Flag *reading* is confirmed working (2026-08-06): a save with Iudex dead reads
+him as dead and six other bosses as alive. What has still not been watched is a
+flag flipping **during** a run and the split advancing off the back of it.
+
+> ⚠️ **Starting a run on a save with bosses already dead will skip through them
+> immediately.** The tracker advances on a flag being set, and a flag set before
+> the run began still counts. That is arguably correct — it catches up to where
+> you actually are — but it is startling. To watch a split fire properly, start
+> from a save where the next boss is still alive.
 
 If a split does not fire, open the diagnostic with the boss dead:
 

@@ -42,8 +42,20 @@ public sealed record FlagLookup
     public long EventFlagMan { get; init; }
     public long Table { get; init; }
     public long Bucket { get; init; }
+
+    /// <summary>Address holding a pointer to the flag block — not the bits themselves.</summary>
     public long ResultBase { get; init; }
+
+    /// <summary>The flag block, after dereferencing <see cref="ResultBase"/>.</summary>
+    public long FlagBlock { get; init; }
+
     public int WordOffset { get; init; }
-    public uint Word { get; init; }
     public int Bit { get; init; }
+
+    /// <summary>
+    /// The 32 bits containing this flag. A value that looks like the upper half
+    /// of a 64-bit pointer (0x00007FFx) means the block was not dereferenced and
+    /// this is pointer memory rather than flags.
+    /// </summary>
+    public uint Word { get; init; }
 }

@@ -120,7 +120,7 @@ work that does not touch it.
 |---|---|---|---|
 | 0 | ~~**Attaching at all**~~ | ✅ **Confirmed 2026-08-06** on game version **1.15.2.0** — AOB scanning and pointer resolution work | — |
 | 0b | ~~**Timer and hit counting**~~ | ✅ **Confirmed** — the timer starts on a new game and hits register | — |
-| 1 | **Event-flag reads** | Kill any boss and watch the split advance | All auto-splitting depends on it |
+| 1 | ~~**Event-flag reads**~~ | ✅ **Confirmed 2026-08-06.** Iudex reads dead on a save where he is; six other bosses read alive. The lookup was missing a dereference — the computed address holds a *pointer* to the flag block, not the bits | — |
 | 2 | **IGT persists across a restart** | Note IGT, quit to desktop, relaunch, load in; IGT should resume at or above the noted value | The entire resume-a-run feature rests on this |
 | 3 | **IGT at the main menu** | Watch IGT while sitting at the menu | The tracker assumes menu IGT is meaningless and ignores it; if it reads as a huge or negative value the resume comparison needs a guard |
 | 4 | **Boss-defeat flag ids** | Kill any boss and watch its split advance, or `GET /api/flags?ids=…` to check one directly | All 25 ids are now filled in from the published table, and the two already known match it — but none have been seen flipping in a real run |
@@ -156,6 +156,13 @@ Decisions not yet made. Flagged here rather than silently assumed.
   always-on-top desktop window is an optional extra, not a requirement.
 - **Read-only.** The engine never writes to game memory. This is a stated
   property of the project, not an implementation detail.
+- **The event-flag lookup ends in a pointer, not the bits.** `(c << 4) + bucket +
+  category * 0xa8` is the address of a *pointer* to the block of flag bits; it
+  must be dereferenced before reading the word. Reading in place returns the
+  upper half of that pointer — a value like `0x00007FF3` — which is never the
+  flag asked about and is sometimes non-zero in the bit being tested, so it
+  reported some bosses dead that were alive. Confirmed against a live game.
+  **A word that looks like `0x00007FFx` is the signature of this mistake.**
 - **A run starts when the player loads into the world.** Not on a hotkey, not on
   an IGT reset. Being in a level is what "a run has begun" means; menus and
   loading screens are not part of it.
