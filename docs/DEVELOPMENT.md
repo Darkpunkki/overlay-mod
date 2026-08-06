@@ -38,6 +38,15 @@ Then attach the executable to a GitHub release:
 gh release create v0.1.0 publish/OverlayMod.exe --title "OverlayMod v0.1.0" --notes "..."
 ```
 
+> **The repository is private.** Release assets on a private repository are only
+> downloadable by people with access to it, so a release is not yet a way to hand
+> the tool to someone else — sending them the `.exe` directly is. Making the
+> repository public would change that, and is a decision to take deliberately
+> rather than by accident.
+
+The executable is self-contained and verified to run on a machine with no .NET
+available, binding loopback only. Recipients need Windows x64 and nothing else.
+
 The self-contained build is the right default: someone who wants to track a run
 should not have to install a runtime first. The slim build is worth offering
 alongside it for people who already have .NET.

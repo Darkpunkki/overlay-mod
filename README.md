@@ -25,20 +25,38 @@ never writes to the game — it only reads.
 
 ## Install
 
-Download `OverlayMod.exe` and put it in a folder of its own. It needs nothing
-else installed, and it writes its settings into an `appdata` folder beside
-itself.
-
-Windows will likely warn that the publisher is unknown — the executable is
-unsigned. Choose **More info → Run anyway**.
-
-Building it yourself instead:
+> **No release has been published yet.** Build it yourself, or get
+> `OverlayMod.exe` from someone who has.
 
 ```powershell
 git clone https://github.com/Darkpunkki/overlay-mod
 cd overlay-mod
 ./scripts/publish.ps1
 ```
+
+That produces `publish/OverlayMod.exe`. Put it in a folder of its own — it writes
+its settings and history into an `appdata` folder beside itself.
+
+It is a single file and needs **nothing else installed**: no .NET, no runtime, no
+installer. Windows 64-bit only.
+
+Windows will warn that the publisher is unknown, because the executable is
+unsigned. Choose **More info → Run anyway**.
+
+### Sharing it with someone
+
+Send them the one `.exe`. That is genuinely all they need — verified on a machine
+with no .NET available. Worth telling them:
+
+- It is about **180 MB**, so use a file-sharing service rather than email.
+- **SmartScreen will warn** on first run; it is unsigned.
+- **Antivirus may flag it.** It reads another process's memory and registers
+  global hotkeys, which looks unusual without the context.
+- They still need **Dark Souls III running offline with EAC disabled** — see the
+  warning above. The overlay cannot do that for them.
+
+It listens on **loopback only** (`127.0.0.1`), so nothing is exposed to the
+network and Windows Firewall will not prompt.
 
 ## Use it
 
