@@ -30,6 +30,27 @@
   let catalogue = null;
   let toastTimer = 0;
 
+  // --- appearance ---
+  //
+  // Each control maps to one field. Sliders carry a formatter for their readout;
+  // colours need none. Wiring them from a table keeps adding a setting to one
+  // line here rather than a block of near-identical handlers.
+  const APPEARANCE = [
+    { key: "scale", input: "apScale", out: "apScaleOut", number: true, format: (v) => `${(+v).toFixed(2)}×` },
+    { key: "plateOpacity", input: "apPlateOpacity", out: "apPlateOpacityOut", number: true, format: (v) => `${Math.round(v * 100)}%` },
+    { key: "shadowStrength", input: "apShadow", out: "apShadowOut", number: true, format: (v) => `${Math.round(v * 100)}%` },
+    { key: "visibleSplits", input: "apSplits", out: "apSplitsOut", number: true, format: (v) => `${v}` },
+    { key: "accent", input: "apAccent" },
+    { key: "text", input: "apText" },
+    { key: "dim", input: "apDim" },
+    { key: "ahead", input: "apAhead" },
+    { key: "behind", input: "apBehind" },
+    { key: "plate", input: "apPlate" },
+  ];
+
+  let appearance = null;
+  let appearanceTimer = 0;
+
   function toast(message) {
     dom.toast.textContent = message;
     dom.toast.hidden = false;
@@ -162,6 +183,60 @@
     }));
   }
 
+  // --- appearance editing ---
+
+  function showAppearance(settings) {
+    appearance = settings;
+
+    for (const f of APPEARANCE) {
+      const input = el(f.input);
+      if (!input) continue;
+      input.value = settings[f.key];
+      if (f.out && f.format) el(f.out).textContent = f.format(settings[f.key]);
+    }
+  }
+
+  // Dragging a slider fires continuously; saving on every event would mean a
+  // request per pixel. Show the change at once, persist once it settles.
+  function onAppearanceInput(field, raw) {
+    const value = field.number ? Number.parseFloat(raw) : raw;
+    appearance = { ...appearance, [field.key]: field.key === "visibleSplits" ? Math.round(value) : value };
+
+    if (field.out && field.format) el(field.out).textContent = field.format(value);
+
+    clearTimeout(appearanceTimer);
+    appearanceTimer = setTimeout(saveAppearance, 150);
+  }
+
+  async function saveAppearance() {
+    try {
+      const { settings } = await post("/api/appearance", appearance);
+      appearance = settings;
+    } catch (err) {
+      toast(`Could not save appearance: ${err.message}`);
+    }
+  }
+
+  async function loadAppearance() {
+    const { settings } = await (await fetch("/api/appearance")).json();
+    showAppearance(settings);
+  }
+
+  for (const field of APPEARANCE) {
+    const input = el(field.input);
+    if (input) input.addEventListener("input", () => onAppearanceInput(field, input.value));
+  }
+
+  el("apReset").addEventListener("click", async () => {
+    try {
+      const { settings } = await post("/api/appearance/reset");
+      showAppearance(settings);
+      toast("Appearance reset");
+    } catch (err) {
+      toast(`Reset failed: ${err.message}`);
+    }
+  });
+
   // --- live status, from the same stream the overlay uses ---
 
   function renderLive(state) {
@@ -236,4 +311,5 @@
 
   loadCatalogue().catch((err) => toast(`Could not load routes: ${err.message}`));
   loadHotkeys().catch(() => { /* hotkeys are optional; the buttons still work */ });
+  loadAppearance().catch((err) => toast(`Could not load appearance: ${err.message}`));
 })();

@@ -4,6 +4,7 @@ using OverlayMod.Engine.GameState;
 using OverlayMod.Engine.Persistence;
 using OverlayMod.Engine.Tracking;
 using OverlayMod.Host;
+using OverlayMod.Host.Appearance;
 using OverlayMod.Host.Hotkeys;
 using OverlayMod.Host.Logging;
 using OverlayMod.Host.Tray;
@@ -31,6 +32,7 @@ builder.Services.AddSingleton<IRecordStore>(_ => new JsonRecordStore(options.Rec
 builder.Services.AddSingleton(_ => new RunStateStore(options.RunStatePath));
 builder.Services.AddSingleton(_ => new RouteStore(options.RoutesDirectory));
 builder.Services.AddSingleton(_ => new SettingsStore(options.SettingsPath));
+builder.Services.AddSingleton(_ => new AppearanceStore(options.AppearancePath));
 builder.Services.AddSingleton<RunController>();
 builder.Services.AddSingleton<StateBroadcaster>();
 builder.Services.AddHostedService<EngineLoop>();
@@ -198,6 +200,23 @@ app.MapGet("/api/hotkeys", (HotkeyService hotkeys) => Results.Ok(new
 {
     bindings = hotkeys.Bindings.Select(b => new { action = b.Action, key = b.Key, active = b.Active }),
 }));
+
+// How the overlay looks. The overlay refetches this whenever the version in the
+// state stream moves, so edits from the control page land in OBS immediately.
+app.MapGet("/api/appearance", (AppearanceStore store) =>
+    Results.Ok(new { version = store.Version, settings = store.Current }));
+
+app.MapPost("/api/appearance", (AppearanceSettings settings, AppearanceStore store) =>
+{
+    var applied = store.Update(settings);
+    return Results.Ok(new { version = store.Version, settings = applied });
+});
+
+app.MapPost("/api/appearance/reset", (AppearanceStore store) =>
+{
+    var applied = store.Reset();
+    return Results.Ok(new { version = store.Version, settings = applied });
+});
 
 // Shut the host down. The tray icon can do this too, but it hides behind the
 // notification-area overflow arrow, and a windowed process ignores Ctrl+C — so

@@ -26,6 +26,13 @@ public sealed record OverlayState(
     int ActiveIndex,
     IReadOnlyList<SplitView> Splits)
 {
+    /// <summary>
+    /// Bumped whenever the appearance changes. The overlay refetches the settings
+    /// only when this moves, which keeps them out of every frame.
+    /// </summary>
+    public int AppearanceVersion { get; init; }
+
+
     public static OverlayState From(
         RunTracker tracker, Route route, PersonalBests bests, GameSnapshot snapshot)
     {

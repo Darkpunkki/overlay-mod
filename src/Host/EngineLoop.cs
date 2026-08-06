@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OverlayMod.Engine.GameState;
+using OverlayMod.Host.Appearance;
 
 namespace OverlayMod.Host;
 
@@ -21,6 +22,7 @@ public sealed class EngineLoop : BackgroundService
     private readonly RunController _run;
     private readonly StateBroadcaster _bus;
     private readonly OverlayHostOptions _options;
+    private readonly AppearanceStore _appearance;
     private readonly ILogger<EngineLoop> _log;
 
     private DateTime _lastAttachAttempt = DateTime.MinValue;
@@ -31,12 +33,14 @@ public sealed class EngineLoop : BackgroundService
         RunController run,
         StateBroadcaster bus,
         OverlayHostOptions options,
+        AppearanceStore appearance,
         ILogger<EngineLoop> log)
     {
         _source = source;
         _run = run;
         _bus = bus;
         _options = options;
+        _appearance = appearance;
         _log = log;
     }
 
@@ -98,6 +102,8 @@ public sealed class EngineLoop : BackgroundService
     private void Observe(GameSnapshot snapshot)
     {
         _run.Tick(snapshot, _source.Flags, _source.Generation);
-        _bus.Publish(JsonSerializer.Serialize(_run.Project(snapshot), Json));
+
+        var state = _run.Project(snapshot) with { AppearanceVersion = _appearance.Version };
+        _bus.Publish(JsonSerializer.Serialize(state, Json));
     }
 }

@@ -37,6 +37,8 @@ public sealed class OverlayHostOptions
 
     public string HotkeysPath => Path.Combine(DataDirectory, "hotkeys.json");
 
+    public string AppearancePath => Path.Combine(DataDirectory, "appearance.json");
+
     public string LogPath => Path.Combine(DataDirectory, "overlaymod.log");
 
     /// <summary>Run without the notification-area icon.</summary>

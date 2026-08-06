@@ -47,6 +47,45 @@
   const EM_DASH = "–";
 
   let lastMessageAt = 0;
+  let appearanceVersion = -1;
+
+  // --- appearance ---
+
+  function rgba(hex, alpha) {
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex ?? "");
+    if (!m) return hex;
+    const [r, g, b] = [1, 2, 3].map((i) => Number.parseInt(m[i], 16));
+    return `rgb(${r} ${g} ${b} / ${Math.round(alpha * 100)}%)`;
+  }
+
+  // Everything the stylesheet reads is a custom property, so restyling is just
+  // setting them — no layout code needs to know a theme changed.
+  function applyAppearance(s) {
+    const root = document.documentElement.style;
+    root.setProperty("--om-scale", s.scale);
+    root.setProperty("--om-text", s.text);
+    root.setProperty("--om-text-dim", s.dim);
+    root.setProperty("--om-text-faint", rgba(s.dim, 0.72));
+    root.setProperty("--om-accent", s.accent);
+    root.setProperty("--om-ahead", s.ahead);
+    root.setProperty("--om-behind", s.behind);
+    root.setProperty("--om-plate", rgba(s.plate, s.plateOpacity));
+    root.setProperty("--om-shadow", `0 1px 3px rgb(0 0 0 / ${Math.round(s.shadowStrength * 100)}%)`);
+
+    if (Number.isFinite(s.visibleSplits)) visibleSplits = s.visibleSplits;
+  }
+
+  async function refreshAppearance(version) {
+    if (version === appearanceVersion) return;
+    appearanceVersion = version;
+
+    try {
+      const { settings } = await (await fetch("/api/appearance")).json();
+      applyAppearance(settings);
+    } catch (err) {
+      console.error("[OverlayMod] could not load appearance", err);
+    }
+  }
 
   // --- options ---
 
@@ -220,6 +259,9 @@
   }
 
   function render(state) {
+    // Cheap: only actually fetches when the version has moved.
+    refreshAppearance(state.appearanceVersion);
+
     dom.overlay.classList.toggle("is-boss-active", !!state.bossFightActive);
 
     dom.runTimer.textContent = formatTime(state.runIgtMs);

@@ -1,270 +1,195 @@
-# OverlayMod — Dark Souls III run tracker & overlay
+# OverlayMod
 
-A standalone, streamer-friendly overlay for Dark Souls III speed/challenge runs.
-It aims to match LiveSplit + auto-splitter (run timer, auto-detected splits,
-personal bests, save/export) **and** add first-class **hit and death tracking**,
-attributed per split and split into *approach* vs *boss* phases.
+A run tracker and overlay for **Dark Souls III**, built for recording and
+streaming challenge runs.
 
-A run uses a **challenge profile** (No-Hit, Deathless, Any%, All-Bosses) that
-decides what each split shows. For a No-Hit run, the active boss split shows
-hits taken in the approach, hits taken from the boss, and the personal best for
-that split — alongside a whole-run PB for the best total attempt.
+It times your run, follows your route, splits automatically when a boss dies, and
+counts the **hits and deaths you take on each boss** — comparing every one
+against your best. Point OBS at it and the overlay lands in your recording.
 
-> Status: **early development.** Milestones 1–4 are built: the memory-reading
-> foundation, the run-tracking state machine, the localhost host and live state
-> stream, and the overlay itself. Auto-splitting works against a scripted
-> replay but has not been verified against the real game. See
-> [the plan](#milestones).
+![status](https://img.shields.io/badge/status-early%20development-orange)
 
-## ⚠️ Offline / anti-cheat
+---
 
-This tool reads the game's memory. **Only run it offline, with Easy Anti-Cheat
-(EAC) disabled** — the standard setup for DS3 speedrunning and practice tools.
-Reading game memory while connected online can get your account soft-banned.
-Use the community offline launcher / `-noeac` method (Steam must be running;
-offline mode is fine). The overlay never writes to the game; it is read-only.
+## ⚠️ Read this first
 
-## How it's displayed
+OverlayMod reads Dark Souls III's memory. **Only run it offline, with Easy
+Anti-Cheat disabled.** Reading game memory while connected can get your account
+soft-banned.
 
-The target is **a recorded video with the overlay composited on top**. The
-engine hosts a small localhost server; the overlay is a transparent-background
-web page that OBS renders as a **Browser Source** layered over your game
-capture. OBS records that composite to a file exactly as it would stream it, so
-the overlay lands in the recording without ever touching the game's rendering.
+This is the standard setup for DS3 speedrunning and practice tools, and
+[docs/LIVE-TESTING.md](docs/LIVE-TESTING.md) walks through it. OverlayMod itself
+never writes to the game — it only reads.
 
-Nothing is injected into the game to make this work, and the overlay does *not*
-appear on your own monitor while you play — it lives in the capture. (A
-transparent always-on-top desktop window showing the same page, for live
-feedback while practising, is an optional extra; it reuses the same web UI and
-is not on the critical path.)
+---
 
-## Tech
+## Install
 
-- **Engine** (`src/Engine`) — C# / .NET 8. Reads DS3 memory (process attach, AOB
-  signature scanning, RIP-relative + multi-level pointer resolution). MIT.
-- **Tracking** (`src/Engine/Tracking`) — `RunTracker`, the pure run-state machine:
-  IGT-delta timing, hits from HP drops, deaths, split advancement. No memory access,
-  so it is fully testable from synthetic snapshots.
-- **Persistence** (`src/Engine/Persistence`) — finished runs and personal bests,
-  plus a checkpoint of the run in progress. JSON for now; SQLite in Milestone 6.
-- **Host** (`src/Host`) — ASP.NET Core. Polls the game, runs the tracker, serves
-  the overlay and streams state over Server-Sent Events on loopback.
-- **Spike** (`src/Spike`) — Milestone 1 console app that streams live values.
-- Overlay and control pages are embedded in the assembly, so a published build
-  is a single executable rather than an exe plus a folder of loose assets.
-- **Tests** (`tests/Engine.Tests`) — tracker logic, resume behaviour, personal
-  bests, all driven from synthetic snapshots.
+Download `OverlayMod.exe` and put it in a folder of its own. It needs nothing
+else installed, and it writes its settings into an `appdata` folder beside
+itself.
 
-## Where the overlay actually appears
+Windows will likely warn that the publisher is unknown — the executable is
+unsigned. Choose **More info → Run anyway**.
 
-The engine serves a web page on loopback. That page can be shown in three
-places, and you choose which by where you point something at the URL:
-
-| Where | How | Works today |
-|---|---|---|
-| **In your recording / stream** | OBS **Browser Source** layered over your game capture | ✅ the intended use |
-| **In a browser window** | Just open the URL on a second monitor | ✅ |
-| **On top of the game while you play** | Would need a transparent always-on-top window | ❌ not built — optional extra |
-
-It does **not** draw over the game itself. Nothing is injected into Dark Souls
-III; the overlay is a separate page that OBS composites on top when recording.
-If you want it on your own screen while playing, put it in a browser window on a
-second monitor, or wait for the optional desktop-window mode.
-
-## Getting it
-
-Build a standalone executable — one file, no .NET install needed on the machine
-that runs it:
+Building it yourself instead:
 
 ```powershell
+git clone https://github.com/Darkpunkki/overlay-mod
+cd overlay-mod
 ./scripts/publish.ps1
 ```
 
-That produces `publish/OverlayMod.exe` (~180 MB, because the runtime is bundled).
-Run it and OverlayMod appears in the notification area; right-click for the
-overlay and control-panel links, the data folder, and the log. Routes, history
-and settings are written to an `appdata` folder beside the executable.
+## Use it
 
-For development, `dotnet run --project src/Host` keeps a console and prints its
-logs there instead.
+**1. Launch Dark Souls III offline with EAC disabled.**
 
-> **First time testing against the real game?** Follow
-> **[docs/LIVE-TESTING.md](docs/LIVE-TESTING.md)** — it covers launching offline
-> without EAC, and a checklist of what has never been confirmed on real hardware.
+In short: set Steam to offline mode, then run `DarkSoulsIII.exe` **directly**
+from the game folder (right-click the game in Steam → Manage → Browse local
+files) rather than pressing Play. Check Task Manager afterwards: `EasyAntiCheat`
+must not be running. Full steps are in
+[docs/LIVE-TESTING.md](docs/LIVE-TESTING.md).
 
-## Playing a tracked run
+**2. Run `OverlayMod.exe`.**
 
-1. **Launch Dark Souls III offline with EAC disabled.** Non-negotiable — see the
-   warning above. Steam can be running; Steam's offline mode is fine.
-2. **Start OverlayMod** (`OverlayMod.exe`, or `dotnet run --project src/Host`).
-   Order does not matter. It retries attaching once a second and picks the game
-   up whenever it appears.
-3. **Pick what you're running** at <http://127.0.0.1:8777/control/> — the
-   challenge (No-Hit, Deathless, Any%, All Bosses) and the route. The choice is
-   remembered for next time.
-4. **OBS is only needed if you want it in a recording.** Add a Browser Source
-   pointing at <http://127.0.0.1:8777/overlay/> at about **500×420**, and drag it
-   above your game capture in the Sources list — the topmost source draws in
-   front. To just watch it yourself, open that URL in a browser instead.
+It goes straight to the notification area — no window opens. Order does not
+matter; it picks the game up whenever it appears.
 
-   The split list shows a fixed number of rows and scrolls through the route as
-   you go, so a 25-boss route needs no more height than a 3-boss one. Use
-   `?splits=10` for a taller list.
-5. **Play.** The run starts when you load into the world. Quitting the game
-   pauses the timer; loading back in resumes the same run.
+**3. Open the control panel: <http://127.0.0.1:8777/control/>**
 
-### Hotkeys
+Choose your **challenge** and **route**. Both are remembered next time.
 
-Global, so they work without leaving the game. Change them in
-`appdata/hotkeys.json` and restart the host, or turn them off with
-`--no-hotkeys`. The control page shows what is actually bound.
+**4. Play.**
 
-| Default | Action |
-|---|---|
-| `Ctrl+Alt+S` | Start a run (overrides the automatic start) |
-| `Ctrl+Alt+D` | Split — needed for bosses with no known defeat flag |
-| `Ctrl+Alt+R` | Reset the run |
-
-No game to hand? `--fake` replays a scripted run so the overlay can be developed
-and checked on its own:
-
-```powershell
-dotnet run --project src/Host -- --fake
-```
-
-| Option | Meaning |
-|---|---|
-| `--fake` | Replay the scripted demo run instead of reading the game |
-| `--port <n>` | Port to listen on (default 8777) |
-| `--data <dir>` | Routes, history and checkpoints (default `./appdata`) |
-| `--no-hotkeys` | Do not register global hotkeys |
-| `--no-tray` | Do not show a notification-area icon |
-| `?theme=<name>` | Overlay URL option: `minimal` or `light` |
-| `?scale=<n>` | Overlay URL option: scale the overlay, e.g. `1.5` |
-| `?splits=<n>` | Overlay URL option: split rows shown at once (default 6) |
+Your run starts when you load into the world. Boss kills split automatically.
+Quitting the game pauses the timer; loading back in carries on where you left
+off.
 
 ### Stopping it
 
-OverlayMod runs in the background, so closing a terminal will not stop it and
-`Ctrl+C` does nothing. Use **Quit OverlayMod** on the control page, or
-right-click the notification-area icon (behind the **^** arrow by the clock) and
-choose **Exit**.
+**Quit OverlayMod** on the control panel, or right-click the notification-area
+icon (behind the **^** arrow by the clock) → **Exit**. Closing a terminal will
+not stop it.
 
-## Challenges and routes
+## Use it with OBS
 
-The **challenge** decides what the overlay shows and how runs are ranked:
+1. **Sources → + → Browser**
+2. **URL:** `http://127.0.0.1:8777/overlay/`
+3. **Size:** about **500 × 420**
+4. Drag it **above** your game capture in the Sources list — the top source draws
+   in front
 
-Each split shows whichever metric the challenge is ranked by, next to that
-split's personal best — comparing hits on a time-ranked run would tell you
-nothing.
+The overlay has a transparent background, so it composites straight onto your
+capture. The split list shows a fixed number of rows and scrolls through the
+route, so a 25-boss route needs no more height than a 3-boss one.
 
-**Personal bests come in two kinds.** A **split best** is earned the moment that
-boss dies, whether or not you go on to finish — so an abandoned attempt still
-improves your best Iudex. A **whole-run best**, shown next to the run total, only
-comes from a run you actually completed.
+If it looks small, resize the **source** rather than scaling the layer — scaling
+blurs it. Better still, raise **Size** in the control panel.
 
-| Challenge | Ranked by | Each split shows | Also |
-|---|---|---|---|
-| No-Hit | Total hits | Hits vs. best | — |
-| Deathless | Deaths | Deaths vs. best | — |
-| Any% | Time | Time vs. best | Death total |
-| All Bosses | Time | Time vs. best | Death total, approach/boss hit breakdown |
+## Challenges
 
-Routes are JSON files in `appdata/routes/`, written on first run and meant to be
-edited. Add or reorder splits, then hit **Reload from disk** on the control page.
-A split carries the boss-defeat event flag that auto-advances it; a split with no
-flag has to be advanced manually with the **Split** button.
+The challenge decides what the overlay shows and what your runs are judged on.
 
-Four routes ship:
-
-| Route | Splits | For |
+| Challenge | Judged on | Each split shows |
 |---|---|---|
-| **Quick route** | 13 | A normal completion — the shorter path to the Kiln |
-| **All Bosses (main game)** | 19 | Everything in the base game |
-| **All Bosses (with DLC)** | 25 | Base game plus both DLCs |
-| **Demo (first three bosses)** | 3 | Used by `--fake`; no game needed |
+| **No-Hit** | Total hits | Hits taken, against your best for that boss |
+| **Deathless** | Deaths | Deaths, against your best for that boss |
+| **Any%** | Time | Split time, against your best for that boss |
+| **All Bosses** | Time | Split time, plus approach-vs-boss hit breakdown |
 
-Every boss carries its defeat flag, so all splits can auto-advance.
+A run is never failed automatically. Take a hit in a No-Hit run and it keeps
+counting — finish the attempt and see how it compares.
 
-Built-in routes are written only when the routes folder is empty, so a route you
-delete stays deleted. **Restore built-in routes** on the control page writes back
-any that are missing — including ones added in a newer version.
+### Personal bests
 
-> ⚠️ **Auto-splitting has not been confirmed on a live game yet.** The flag ids
-> are the game's own constants and cross-check against the two values already
-> known, but nobody has watched them flip in a real run. Until that happens,
-> keep an eye on whether splits land where they should — and the **Split** hotkey
-> is there if one does not.
+Two kinds, and they are earned differently:
 
-## Build & run the spike
+- **Per boss** — banked the moment that boss dies, whether or not you finish. An
+  abandoned run still improves your best Iudex.
+- **Whole run** — only from a run you actually completed.
 
-The repo uses .NET 8. If `dotnet` isn't on your PATH, it was installed
-user-locally at `%LOCALAPPDATA%\Microsoft\dotnet` (open a fresh terminal so the
-persisted PATH/`DOTNET_ROOT` apply).
+## Routes
 
-```powershell
-dotnet build OverlayMod.sln -c Debug
-dotnet run --project src/Spike
-```
+| Route | Splits |
+|---|---|
+| **Quick route** | 13 — a normal completion |
+| **All Bosses (main game)** | 19 |
+| **All Bosses (with DLC)** | 25 |
+| **Demo** | 3 — for trying things out without the game |
 
-Then launch DS3 (offline, EAC off) and watch the table. **Milestone 1 verification
-checklist** — confirm each value tracks reality:
+Routes are JSON files in `appdata/routes/`. Edit them freely — add splits,
+reorder, rename — then press **Reload from disk**. A route you delete stays
+deleted; **Restore built-in routes** brings back any that are missing.
 
-| Value         | Confidence            | What to check                                            |
-|---------------|-----------------------|----------------------------------------------------------|
-| IGT           | high (from autosplit) | ticks up during play; pauses on loading screens          |
-| load          | high                  | `yes` during loading screens                             |
-| player        | high                  | `yes` in a level, `no` at the main menu                  |
-| position      | high                  | x/y/z change as you move                                 |
-| HP            | verified live         | matches your health bar; drops when you take a hit       |
-| IudexGundyr   | **unverified**        | reads `DEAD` on a save where Iudex is already killed     |
+If a split ever fails to advance on its own, the **Split** hotkey moves it along.
 
-The HP chain was confirmed against the live game. The remaining check is the
-**event-flag** column: load a save past Iudex Gundyr and confirm it reads `DEAD`.
-Boss-defeat flags drive auto-splitting, so that read has to be trustworthy
-before Milestone 5.
+## Customising the look
 
-## Milestones
+The control panel's **Appearance** section changes size, colours, panel
+transparency and how many split rows show, with a live preview on a chequerboard
+so you can see what is see-through. Changes apply immediately, including in OBS.
 
-The list below is the roadmap — *what* gets built, in what order. For the
-*how* — designs, file layouts, the engine↔overlay data contract and task
-checklists — see **[docs/PLAN.md](docs/PLAN.md)**.
+## Hotkeys
 
-1. **Memory spike** ✅ — attach + read IGT, loading, player-loaded, position, HP.
-   Verified against the live game.
-2. **Engine core** ✅ — `GameSnapshot` + `RunTracker` state machine: IGT-delta
-   timing, hits, deaths, approach/boss segments, split advancement (+ unit tests).
-3. **Server & live data** ✅ — localhost host broadcasting tracker state as JSON
-   over Server-Sent Events, plus a **scripted fake source** so the overlay can be
-   built and tested with no game running.
-4. **Overlay UI** — transparent-background page: run timer, split list with
-   personal bests, profile-driven display, themes and scaling. Built and running
-   against the fake source.
-   *Done when:* a test clip recorded in OBS (game capture + browser source on
-   top) has the overlay in the file. **This is the headline goal.**
-5. **Auto-splitting for real** — verify event-flag reads live, find the boss-HP /
-   boss-fight-active offset, DS3 boss & area database, route + profile editor.
-6. **Persistence** — SQLite (personal bests already work via JSON),
-   `.lss`/CSV/JSON export.
-7. **Packaging** — tray host, hotkeys, self-contained single-file build.
+Global, so they work without leaving the game.
 
-Milestones 3 and 4 need neither a running game nor the unsolved boss-HP offset,
-so the visible overlay can be finished before auto-splitting is solved. Things
-awaiting a live game are batched in
-[docs/PLAN.md](docs/PLAN.md#pending-live-verification) rather than checked
-piecemeal.
+| Default | Action |
+|---|---|
+| `Ctrl+Alt+S` | Start a run |
+| `Ctrl+Alt+D` | Split |
+| `Ctrl+Alt+R` | Reset the run |
 
-*Optional, any time after 4:* a transparent click-through desktop window hosting
-the same overlay page, for live feedback while practising.
+Change them in `appdata/hotkeys.json` and restart. The control panel shows what
+is actually bound — if another application already owns a combination, it says so.
+
+## Command line
+
+Mostly unnecessary, but available.
+
+| Option | Meaning |
+|---|---|
+| `--fake` | Replay a scripted demo run; no game needed |
+| `--port <n>` | Port to listen on (default 8777) |
+| `--data <dir>` | Where settings and history live |
+| `--no-hotkeys` | Do not register global hotkeys |
+| `--no-tray` | No notification-area icon |
+
+## If something is wrong
+
+The log is the first place to look: **`appdata/overlaymod.log`**, next to the
+executable, or **Open log file** on the tray icon.
+
+| Problem | Try |
+|---|---|
+| Control panel says "not running" | Check DS3 is running and was launched directly rather than through the EAC launcher. Try running OverlayMod as administrator |
+| Numbers are zero or nonsense | Note your game version (main menu, bottom corner) and open an issue with the log |
+| A boss kill did not split | `http://127.0.0.1:8777/api/diagnostics?flag=<id>` reports every step of the lookup. Split manually with `Ctrl+Alt+D` meanwhile |
+| Hotkeys do nothing | Another app may own the combination; the control panel marks unbound ones |
+
+Known limitations:
+
+- **Fall damage counts as a hit.** Telling damage sources apart is not built yet.
+- **The approach-vs-boss breakdown is always empty**, because detecting when a
+  boss fight is active needs a memory offset that has not been found. It only
+  affects the All Bosses profile.
+- **Auto-splitting has been confirmed to read boss flags correctly**, but has not
+  yet been watched through a full run.
+
+## More
+
+- [docs/LIVE-TESTING.md](docs/LIVE-TESTING.md) — launching offline without EAC,
+  and what still needs checking against the real game
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — building, testing, architecture
+- [docs/PLAN.md](docs/PLAN.md) — the implementation plan and design decisions
 
 ## Credits
 
 DS3 memory layouts are documented by the reverse-engineering community. Pointer
-*facts* (signatures, offsets, the boss event-flag table) were referenced from
-the open-source [SoulSplitter](https://github.com/FrankvdStam/SoulSplitter),
+*facts* — signatures, offsets, and the boss event-flag table — were referenced
+from the open-source [SoulSplitter](https://github.com/FrankvdStam/SoulSplitter),
 [darksoulsiii-practice-tool](https://github.com/veeenu/darksoulsiii-practice-tool),
-and community Cheat Engine tables, and re-implemented independently here. No code
-was copied from those (GPL/other-licensed) projects.
+and community Cheat Engine tables, then re-implemented independently here. No
+code was copied from those (GPL and other-licensed) projects.
 
 ## License
 

@@ -55,6 +55,55 @@
       </p>
     </section>
 
+    <section class="card">
+      <h2>Appearance</h2>
+      <p class="hint">
+        Changes apply straight away, in the browser and in OBS. The preview sits on
+        a chequerboard so you can see what is transparent.
+      </p>
+
+      <div class="preview">
+        <iframe class="preview__frame" id="preview" src="/overlay/" title="Overlay preview"></iframe>
+      </div>
+
+      <div class="fields">
+        <label class="field">
+          <span class="field__label">Size</span>
+          <input type="range" id="apScale" min="0.5" max="3" step="0.05">
+          <output class="field__value" id="apScaleOut">1.00×</output>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Panel opacity</span>
+          <input type="range" id="apPlateOpacity" min="0" max="1" step="0.02">
+          <output class="field__value" id="apPlateOpacityOut">74%</output>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Text shadow</span>
+          <input type="range" id="apShadow" min="0" max="1" step="0.05">
+          <output class="field__value" id="apShadowOut">90%</output>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Split rows</span>
+          <input type="range" id="apSplits" min="3" max="20" step="1">
+          <output class="field__value" id="apSplitsOut">6</output>
+        </label>
+      </div>
+
+      <div class="swatches">
+        <label class="swatch"><input type="color" id="apAccent"><span>Active split</span></label>
+        <label class="swatch"><input type="color" id="apText"><span>Text</span></label>
+        <label class="swatch"><input type="color" id="apDim"><span>Labels</span></label>
+        <label class="swatch"><input type="color" id="apAhead"><span>Ahead of PB</span></label>
+        <label class="swatch"><input type="color" id="apBehind"><span>Behind PB</span></label>
+        <label class="swatch"><input type="color" id="apPlate"><span>Panel</span></label>
+      </div>
+
+      <button class="btn btn--quiet" id="apReset" type="button">Reset to defaults</button>
+    </section>
+
     <section class="card status" id="live">
       <h2>Now</h2>
       <dl class="facts">

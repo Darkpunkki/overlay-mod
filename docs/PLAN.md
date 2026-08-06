@@ -60,6 +60,11 @@ persists, and the host runs happily before the game exists.
       icon behind the notification-area overflow arrow — leaving Task Manager as
       the only exit. The control page now has a Quit button.
 - [ ] Route editor, so custom routes do not mean hand-editing JSON. *Optional.*
+- [x] **Appearance controls.** Size, colours, panel transparency, shadow strength
+      and split-row count, edited on the control page with a live preview over a
+      chequerboard. Values are validated server-side before reaching CSS — they
+      arrive over HTTP and are written into custom properties, so a malformed
+      colour falls back to the default rather than being passed through.
 
 ### 2. Complete visuals, differing per challenge
 
@@ -180,6 +185,11 @@ Decisions not yet made. Flagged here rather than silently assumed.
   it, so repeating it costs overlay space and viewer attention for nothing. HP is
   still read — hits and deaths are derived from it — but it does not reach the
   view model at all.
+- **Appearance is stored server-side, not in the overlay URL.** A version number
+  rides along in the state stream and the overlay refetches only when it moves.
+  That keeps the settings out of every frame at 30Hz while still landing a
+  restyle in OBS immediately — and means the Browser Source URL never has to
+  change.
 - **Personal bests are per-split as well as per-run** ("gold splits"), so the
   overlay can show progress against the best each boss has *ever* been rather
   than only against one best run.

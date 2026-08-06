@@ -93,6 +93,64 @@ code { background: #000; padding: .1rem .3rem; border-radius: .2rem; font-size: 
 .btn--quiet { background: transparent; color: var(--text); border-color: var(--edge); font-weight: 400; }
 .btn--quiet:hover { border-color: var(--dim); }
 
+/* --- appearance editor --- */
+
+/* A chequerboard behind the preview, so transparency is visible rather than
+   guessed at — the overlay is transparent over gameplay, and a plain dark
+   backdrop here would hide exactly what needs checking. */
+.preview {
+  --sq: 10px;
+  border: 1px solid var(--edge);
+  border-radius: .35rem;
+  padding: .5rem;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  background-color: #6a6a72;
+  background-image:
+    linear-gradient(45deg, #4b4b52 25%, transparent 25%, transparent 75%, #4b4b52 75%),
+    linear-gradient(45deg, #4b4b52 25%, transparent 25%, transparent 75%, #4b4b52 75%);
+  background-size: calc(var(--sq) * 2) calc(var(--sq) * 2);
+  background-position: 0 0, var(--sq) var(--sq);
+}
+
+.preview__frame {
+  display: block;
+  width: 100%;
+  height: 20rem;
+  border: 0;
+  background: transparent;
+}
+
+.fields { display: flex; flex-direction: column; gap: .6rem; margin-bottom: 1rem; }
+
+.field { display: grid; grid-template-columns: 7rem 1fr 3.5rem; gap: .75rem; align-items: center; }
+.field__label { font-size: .8125rem; color: var(--dim); }
+.field__value { font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; }
+.field input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.swatches { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+
+.swatch {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  border: 1px solid var(--edge);
+  border-radius: .35rem;
+  padding: .3rem .55rem;
+  font-size: .8125rem;
+  cursor: pointer;
+}
+
+.swatch input[type="color"] {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: .2rem;
+  background: none;
+  cursor: pointer;
+}
+
 /* Bound hotkeys, so they do not have to be looked up in a config file. */
 .keys { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
 
