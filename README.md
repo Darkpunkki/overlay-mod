@@ -25,8 +25,14 @@ never writes to the game — it only reads.
 
 ## Install
 
-> **No release has been published yet.** Build it yourself, or get
-> `OverlayMod.exe` from someone who has.
+**[Download the latest release](https://github.com/Darkpunkki/overlay-mod/releases/latest)**
+and put `OverlayMod.exe` in a folder of its own — it writes its settings and
+history into an `appdata` folder beside itself.
+
+It is a single file and needs **nothing else installed**: no .NET, no runtime, no
+installer. Windows 64-bit only.
+
+Or build it yourself:
 
 ```powershell
 git clone https://github.com/Darkpunkki/overlay-mod
@@ -34,21 +40,15 @@ cd overlay-mod
 ./scripts/publish.ps1
 ```
 
-That produces `publish/OverlayMod.exe`. Put it in a folder of its own — it writes
-its settings and history into an `appdata` folder beside itself.
-
-It is a single file and needs **nothing else installed**: no .NET, no runtime, no
-installer. Windows 64-bit only.
-
 Windows will warn that the publisher is unknown, because the executable is
 unsigned. Choose **More info → Run anyway**.
 
 ### Sharing it with someone
 
-Send them the one `.exe`. That is genuinely all they need — verified on a machine
-with no .NET available. Worth telling them:
+Point them at the [releases page](https://github.com/Darkpunkki/overlay-mod/releases/latest),
+or send them the one `.exe` directly — that is genuinely all they need, verified
+on a machine with no .NET available. Worth telling them:
 
-- It is about **180 MB**, so use a file-sharing service rather than email.
 - **SmartScreen will warn** on first run; it is unsigned.
 - **Antivirus may flag it.** It reads another process's memory and registers
   global hotkeys, which looks unusual without the context.
