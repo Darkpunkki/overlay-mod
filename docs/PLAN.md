@@ -42,6 +42,61 @@ Neither blocks Milestones 3 or 4.
 
 ---
 
+## What is left for a working product
+
+Three things define "working" for this project, plus the goals it set for
+itself. Measured honestly against each:
+
+### 1. Choose a challenge before starting the game
+
+**Essentially done.** The control page picks route and challenge, the choice
+persists, and the host runs happily before the game exists.
+
+- [ ] **Packaging.** Starting it means `dotnet run` from a terminal, which is a
+      developer workflow, not a product. Needs a self-contained exe and a tray
+      icon. *(Milestone 7)*
+- [ ] Route editor, so custom routes do not mean hand-editing JSON. *Optional.*
+
+### 2. Complete visuals, differing per challenge
+
+**Done for No-Hit. Incomplete for the time-based profiles.**
+
+- [ ] **Time profiles have no time comparison.** Any% and All Bosses show a
+      split time, but the PB column shows *hits* and `pbIgtMs` is never used, so
+      a time-ranked run cannot see whether it is ahead or behind. The PB column
+      needs to follow the profile's metric.
+- [ ] **No end-of-run state.** A finished run just stops; there is no "run
+      complete" treatment and no acknowledgement of a new personal best.
+- [ ] Approach-vs-boss breakdown displays correctly but is **always empty in a
+      real game** — nothing sets `BossFightActive`. Blocked on the boss-HP
+      offset. *(needs the game)*
+
+### 3. Visible in a window, and composited into a recording
+
+**Believed working, never actually verified.**
+
+- [ ] **Nobody has run it in OBS.** Transparency, sizing, and absence of
+      scrollbars in a Browser Source are all unconfirmed. This is the Milestone 4
+      done-criterion and needs OBS, though not the game.
+
+### 4. The project's other stated goals
+
+- [ ] **Auto-splitting is unproven**, and 17 of 19 bosses have no known flag id,
+      so they split manually. *(needs the game — see below)*
+- [ ] **Global hotkeys.** Now essential rather than polish: with most splits
+      manual, the alternative is alt-tabbing to a browser mid-run, which is
+      unusable. *(Milestone 7)*
+- [ ] **Export** to `.lss`, CSV and JSON, for LiveSplit parity. *(Milestone 6)*
+- [ ] SQLite replacing the JSON store. *Optional — JSON works fine at this
+      scale.* *(Milestone 6)*
+- [x] Per-split and per-run personal bests, hit and death tracking, run resume,
+      route and challenge selection, themes.
+
+### Shortest path to a usable product
+
+Hotkeys and packaging, then one session with the game to fill in the flag ids.
+Everything else is refinement.
+
 ## Pending live verification
 
 Everything here is written, unit-tested where it can be, and **unproven against
@@ -67,8 +122,6 @@ Check 6 is a research task, not a verification.
 
 Decisions not yet made. Flagged here rather than silently assumed.
 
-- **What resets a run?** Death is not a reset in a Deathless profile — it is a
-  run-ending failure. The tracker has no "failed" phase yet. *Needed by M5.*
 - **Multi-monitor / resolution.** Overlay is authored at a fixed design size and
   scaled by OBS, versus authored responsively. Fixed is simpler and normal for
   stream overlays. *Partly settled:* `?scale=` exists; whether that is enough in
@@ -116,6 +169,10 @@ Decisions not yet made. Flagged here rather than silently assumed.
 - **Changing either abandons the run in progress.** The splits, or the thing
   being measured, have changed — carrying the old numbers forward would be
   meaningless.
+- **A run is never automatically failed.** A hit under No-Hit, or a death under
+  Deathless, does not end the run — players want to finish an attempt even after
+  it stops being a clean one, and the personal-best comparison is what tells them
+  how the attempt is going. There is deliberately no "failed" phase.
 - **Unknown boss flag ids are left null, not guessed.** A wrong id fails
   silently: it never fires, or fires at the wrong moment. Null means "advance
   this split manually", which is honest and works. Only Iudex Gundyr
@@ -332,8 +389,6 @@ Remaining, all needing the game:
 - [ ] Route editor in the control page, so splits can be reordered without
       editing JSON. Not blocked by the game, just not urgent while the files are
       simple.
-- [ ] A "failed run" phase, for a death under Deathless or a hit under No-Hit —
-      see the open question above.
 
 ## Milestone 6 — Persistence
 
