@@ -18,6 +18,9 @@ public sealed class RouteStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() },
+        // Route names are user-facing text in a file meant to be hand-edited;
+        // the default encoder would escape ordinary punctuation into \uXXXX.
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     private readonly string _directory;

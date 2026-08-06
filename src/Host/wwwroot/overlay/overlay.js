@@ -104,19 +104,43 @@
     return { from, to: from + size };
   }
 
+  // A split shows whichever metric its profile is ranked by, against that
+  // split's own best. Comparing hits on a time-ranked run tells you nothing.
+  function splitMetric(split, metric) {
+    switch (metric) {
+      case "Time": return { value: split.igtMs, best: split.pbIgtMs, format: formatTime };
+      case "Deaths": return { value: split.deaths, best: split.pbDeaths, format: String };
+      default: return { value: split.hits, best: split.pbHits, format: String };
+    }
+  }
+
   function renderSplits(state) {
     const { from, to } = windowSplits(state.splits, state.activeIndex);
-    const showTimes = state.display.showSplitTimes;
+    const metric = state.display.splitMetric;
+    const isTime = metric === "Time";
     const rows = [];
+
+    // A header, because two bare numbers per row are ambiguous otherwise.
+    const header = document.createElement("li");
+    header.className = "split split--head";
+    header.classList.toggle("split--wide", isTime);
+    for (const [text, cls] of [["", "split__name"], [metric, "split__value"], ["PB", "split__pb"]]) {
+      const cell = document.createElement("span");
+      cell.className = cls;
+      cell.textContent = text;
+      header.append(cell);
+    }
+    rows.push(header);
 
     for (let i = from; i < to; i++) {
       const s = state.splits[i];
       const isActive = i === state.activeIndex && state.phase === "Running";
       const started = s.completed || isActive;
+      const { value, best, format } = splitMetric(s, metric);
 
       const li = document.createElement("li");
       li.className = "split";
-      li.classList.toggle("split--timed", showTimes);
+      li.classList.toggle("split--wide", isTime);
       if (isActive) li.classList.add("is-active");
       else if (s.completed) li.classList.add("is-done");
       else li.classList.add("is-pending");
@@ -125,30 +149,22 @@
       name.className = "split__name";
       name.textContent = s.name;
 
-      const hits = document.createElement("span");
-      hits.className = "split__hits";
+      const current = document.createElement("span");
+      current.className = "split__value";
       if (started) {
-        hits.textContent = s.hits;
-        const cls = comparisonClass(s.hits, s.pbHits);
-        if (cls) hits.classList.add(cls);
+        current.textContent = format(value);
+        const cls = comparisonClass(value, best);
+        if (cls) current.classList.add(cls);
       } else {
-        hits.textContent = EM_DASH;
+        current.textContent = EM_DASH;
       }
 
       // The best this split has ever been, so progress is legible at a glance.
       const pb = document.createElement("span");
       pb.className = "split__pb";
-      pb.textContent = has(s.pbHits) ? s.pbHits : EM_DASH;
+      pb.textContent = has(best) ? format(best) : EM_DASH;
 
-      li.append(name, hits, pb);
-
-      if (showTimes) {
-        const time = document.createElement("span");
-        time.className = "split__time";
-        time.textContent = started ? formatTime(s.igtMs) : EM_DASH;
-        li.append(time);
-      }
-
+      li.append(name, current, pb);
       rows.push(li);
     }
 

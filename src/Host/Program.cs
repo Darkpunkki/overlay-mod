@@ -2,6 +2,7 @@ using OverlayMod.Engine.GameState;
 using OverlayMod.Engine.Persistence;
 using OverlayMod.Engine.Tracking;
 using OverlayMod.Host;
+using OverlayMod.Host.Hotkeys;
 
 // The overlay host: polls the game (or a scripted fake), runs the tracker, and
 // serves both the overlay page and a live state stream on loopback. OBS points a
@@ -26,6 +27,11 @@ builder.Services.AddSingleton(_ => new SettingsStore(options.SettingsPath));
 builder.Services.AddSingleton<RunController>();
 builder.Services.AddSingleton<StateBroadcaster>();
 builder.Services.AddHostedService<EngineLoop>();
+
+// Registered as a singleton as well as a hosted service, so the control page can
+// ask what ended up bound.
+builder.Services.AddSingleton<HotkeyService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<HotkeyService>());
 
 var app = builder.Build();
 
@@ -125,8 +131,15 @@ app.MapGet("/api/flags", (string ids, ISnapshotSource source) =>
     return Results.Ok(new { attached = source.Attached, flags = result });
 });
 
-// Manual run control, mirroring LiveSplit's hotkeys. Wired to real hotkeys in
-// Milestone 7; for now these make the tracker testable from a browser or curl.
+// What the global hotkeys ended up bound to, so the control page can show them
+// rather than the user having to guess or open the config file.
+app.MapGet("/api/hotkeys", (HotkeyService hotkeys) => Results.Ok(new
+{
+    bindings = hotkeys.Bindings.Select(b => new { action = b.Action, key = b.Key, active = b.Active }),
+}));
+
+// Manual run control, mirroring LiveSplit's hotkeys. The same actions the global
+// hotkeys trigger, for when a browser is more convenient.
 var run = app.MapGroup("/api/run");
 run.MapPost("/start", (RunController rc, ISnapshotSource src) =>
 {

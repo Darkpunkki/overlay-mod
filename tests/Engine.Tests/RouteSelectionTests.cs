@@ -153,13 +153,35 @@ public class RouteSelectionTests : IDisposable
 
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
         var noHit = c.Project(GameSnapshot.Detached).Display;
+        Assert.Equal("Hits", noHit.SplitMetric);
         Assert.False(noHit.ShowDeaths);
-        Assert.False(noHit.ShowSplitTimes);
+        Assert.False(noHit.ShowSegmentBreakdown);
+
+        // Deathless ranks by deaths, so that is what each split must show -
+        // showing hits there would compare the wrong thing entirely.
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.Deathless);
+        Assert.Equal("Deaths", c.Project(GameSnapshot.Detached).Display.SplitMetric);
 
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.AllBosses);
         var allBosses = c.Project(GameSnapshot.Detached).Display;
+        Assert.Equal("Time", allBosses.SplitMetric);
         Assert.True(allBosses.ShowDeaths);
-        Assert.True(allBosses.ShowSplitTimes);
+        Assert.True(allBosses.ShowSegmentBreakdown);
+    }
+
+    [Fact]
+    public void EverySplitCarriesAllThreePersonalBestsRegardlessOfProfile()
+    {
+        var c = NewController();
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+        c.Tick(Play(10_000, 1000), new NoFlags(), 0);
+
+        // The payload shape must not change with the profile, so switching
+        // challenge never needs a different client.
+        var split = c.Project(Play(10_000, 1000)).Splits[0];
+        Assert.Null(split.PbHits);
+        Assert.Null(split.PbDeaths);
+        Assert.Null(split.PbIgtMs);
     }
 
     [Fact]

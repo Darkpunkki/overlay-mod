@@ -42,7 +42,8 @@ public sealed record OverlayState(
                 SegmentView.From(s.Approach),
                 SegmentView.From(s.Boss),
                 bests.SplitIgtMs(s.Name),
-                bests.SplitHits(s.Name)));
+                bests.SplitHits(s.Name),
+                bests.SplitDeaths(s.Name)));
         }
 
         var profile = route.Profile;
@@ -59,7 +60,10 @@ public sealed record OverlayState(
             tracker.Phase.ToString(),
             route.Name,
             profile.Name,
-            new DisplayView(profile.ShowSplitTimes, profile.ShowSegmentBreakdown, profile.ShowDeaths),
+            new DisplayView(
+                profile.PrimaryMetric.ToString(),
+                profile.ShowSegmentBreakdown,
+                profile.ShowDeaths),
             tracker.RunIgtMs,
             tracker.TotalHits,
             tracker.TotalDeaths,
@@ -77,7 +81,12 @@ public sealed record OverlayState(
 /// rather than hard-coded in the page, so adding a profile does not mean editing
 /// the overlay's rendering logic.
 /// </summary>
-public sealed record DisplayView(bool ShowSplitTimes, bool ShowSegmentBreakdown, bool ShowDeaths);
+/// <param name="SplitMetric">
+/// Which value each split shows next to its personal best: "Hits", "Deaths" or
+/// "Time". All three are always sent, so the page picks rather than the server
+/// pre-flattening — which keeps the payload shape stable across profiles.
+/// </param>
+public sealed record DisplayView(string SplitMetric, bool ShowSegmentBreakdown, bool ShowDeaths);
 
 /// <summary>The metric this run is ranked by, alongside the best ever achieved.</summary>
 public sealed record PrimaryView(string Metric, int Value, int? Best);
@@ -108,4 +117,5 @@ public sealed record SplitView(
     SegmentView Approach,
     SegmentView Boss,
     int? PbIgtMs,
-    int? PbHits);
+    int? PbHits,
+    int? PbDeaths);

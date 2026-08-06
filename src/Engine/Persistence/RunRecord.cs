@@ -27,14 +27,18 @@ public sealed record PersonalBests(
     int? BestTotalHits,
     int? BestTotalDeaths,
     IReadOnlyDictionary<string, int> BestSplitHits,
+    IReadOnlyDictionary<string, int> BestSplitDeaths,
     IReadOnlyDictionary<string, int> BestSplitIgtMs)
 {
     public static readonly PersonalBests Empty = new(
         null, null, null,
         new Dictionary<string, int>(),
+        new Dictionary<string, int>(),
         new Dictionary<string, int>());
 
     public int? SplitHits(string name) => BestSplitHits.TryGetValue(name, out var v) ? v : null;
+
+    public int? SplitDeaths(string name) => BestSplitDeaths.TryGetValue(name, out var v) ? v : null;
 
     public int? SplitIgtMs(string name) => BestSplitIgtMs.TryGetValue(name, out var v) ? v : null;
 }

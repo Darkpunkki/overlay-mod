@@ -26,6 +26,14 @@ public class JsonRecordStoreTests : IDisposable
         return new RunRecord(route, "No-Hit", DateTimeOffset.UnixEpoch, runMs, totalHits, 0, list);
     }
 
+    private static RunRecord DeathRun(string route, params (string Name, int Deaths)[] splits)
+    {
+        var list = new List<SplitRecord>();
+        var total = 0;
+        foreach (var s in splits) { list.Add(new SplitRecord(s.Name, 1000, 0, s.Deaths)); total += s.Deaths; }
+        return new RunRecord(route, "Deathless", DateTimeOffset.UnixEpoch, 1000, 0, total, list);
+    }
+
     [Fact]
     public void AnUnknownRouteHasNoBests()
     {
@@ -74,6 +82,19 @@ public class JsonRecordStoreTests : IDisposable
         store.Record(Run("r", 0, 0, ("A", 0, 0)));   // never actually played
 
         Assert.Equal(50_000, store.BestsFor("r").SplitIgtMs("A"));
+    }
+
+    [Fact]
+    public void PerSplitDeathBestsAreTrackedToo()
+    {
+        var store = new JsonRecordStore(Path_);
+        store.Record(DeathRun("r", ("A", 3), ("B", 0)));
+        store.Record(DeathRun("r", ("A", 1), ("B", 2)));
+
+        var bests = store.BestsFor("r");
+
+        Assert.Equal(1, bests.SplitDeaths("A"));
+        Assert.Equal(0, bests.SplitDeaths("B"));
     }
 
     [Fact]

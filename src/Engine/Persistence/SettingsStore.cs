@@ -15,6 +15,7 @@ public sealed class SettingsStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() },
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     private readonly string _path;

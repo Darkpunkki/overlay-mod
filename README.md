@@ -89,6 +89,18 @@ second monitor, or wait for the optional desktop-window mode.
 5. **Play.** The run starts when you load into the world. Quitting the game
    pauses the timer; loading back in resumes the same run.
 
+### Hotkeys
+
+Global, so they work without leaving the game. Change them in
+`appdata/hotkeys.json` and restart the host, or turn them off with
+`--no-hotkeys`. The control page shows what is actually bound.
+
+| Default | Action |
+|---|---|
+| `Ctrl+Alt+S` | Start a run (overrides the automatic start) |
+| `Ctrl+Alt+D` | Split — needed for bosses with no known defeat flag |
+| `Ctrl+Alt+R` | Reset the run |
+
 No game to hand? `--fake` replays a scripted run so the overlay can be developed
 and checked on its own:
 
@@ -101,6 +113,7 @@ dotnet run --project src/Host -- --fake
 | `--fake` | Replay the scripted demo run instead of reading the game |
 | `--port <n>` | Port to listen on (default 8777) |
 | `--data <dir>` | Routes, history and checkpoints (default `./appdata`) |
+| `--no-hotkeys` | Do not register global hotkeys |
 | `?theme=<name>` | Overlay URL option: `minimal` or `light` |
 | `?scale=<n>` | Overlay URL option: scale the overlay, e.g. `1.5` |
 
@@ -108,12 +121,16 @@ dotnet run --project src/Host -- --fake
 
 The **challenge** decides what the overlay shows and how runs are ranked:
 
-| Challenge | Ranked by | Shows |
-|---|---|---|
-| No-Hit | Total hits | Hits per boss vs. your best. No times, no death count |
-| Deathless | Deaths | Deaths per boss vs. your best |
-| Any% | Time | Per-split times and deaths |
-| All Bosses | Time | Per-split times, deaths, and approach/boss hit breakdown |
+Each split shows whichever metric the challenge is ranked by, next to that
+split's personal best — comparing hits on a time-ranked run would tell you
+nothing.
+
+| Challenge | Ranked by | Each split shows | Also |
+|---|---|---|---|
+| No-Hit | Total hits | Hits vs. best | — |
+| Deathless | Deaths | Deaths vs. best | — |
+| Any% | Time | Time vs. best | Death total |
+| All Bosses | Time | Time vs. best | Death total, approach/boss hit breakdown |
 
 Routes are JSON files in `appdata/routes/`, written on first run and meant to be
 edited. Add or reorder splits, then hit **Reload from disk** on the control page.

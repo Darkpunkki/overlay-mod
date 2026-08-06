@@ -21,6 +21,7 @@
     factTimer: el("factTimer"),
     factSplit: el("factSplit"),
     overlayUrl: el("overlayUrl"),
+    hotkeys: el("hotkeys"),
     toast: el("toast"),
   };
 
@@ -129,6 +130,36 @@
     render();
   }
 
+  async function loadHotkeys() {
+    const { bindings } = await (await fetch("/api/hotkeys")).json();
+
+    if (!bindings.length) {
+      dom.hotkeys.replaceChildren(
+        Object.assign(document.createElement("p"), {
+          className: "hint",
+          textContent: "Global hotkeys are off. Use the buttons above.",
+        }));
+      return;
+    }
+
+    dom.hotkeys.replaceChildren(...bindings.map((b) => {
+      const chip = document.createElement("span");
+      chip.className = "key";
+      chip.classList.toggle("is-inactive", !b.active);
+
+      const combo = document.createElement("span");
+      combo.className = "key__combo";
+      combo.textContent = b.key;
+
+      const action = document.createElement("span");
+      action.className = "key__action";
+      action.textContent = b.active ? b.action : `${b.action} — not bound`;
+
+      chip.append(combo, action);
+      return chip;
+    }));
+  }
+
   // --- live status, from the same stream the overlay uses ---
 
   function renderLive(state) {
@@ -177,4 +208,5 @@
   };
 
   loadCatalogue().catch((err) => toast(`Could not load routes: ${err.message}`));
+  loadHotkeys().catch(() => { /* hotkeys are optional; the buttons still work */ });
 })();

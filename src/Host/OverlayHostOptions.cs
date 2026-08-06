@@ -15,6 +15,9 @@ public sealed class OverlayHostOptions
     /// <summary>Where run history and the in-progress run checkpoint are kept.</summary>
     public string DataDirectory { get; init; } = "appdata";
 
+    /// <summary>Skip registering global hotkeys, whatever the config file says.</summary>
+    public bool NoHotkeys { get; init; }
+
     public string OverlayUrl => $"http://127.0.0.1:{Port}/overlay/";
 
     public string RecordsPath => Path.Combine(DataDirectory, "records.json");
@@ -25,6 +28,8 @@ public sealed class OverlayHostOptions
 
     public string RoutesDirectory => Path.Combine(DataDirectory, "routes");
 
+    public string HotkeysPath => Path.Combine(DataDirectory, "hotkeys.json");
+
     public string ControlUrl => $"http://127.0.0.1:{Port}/control/";
 
     public static OverlayHostOptions Parse(string[] args)
@@ -33,6 +38,7 @@ public sealed class OverlayHostOptions
         var pollHz = 30;
         var fake = false;
         var dataDirectory = "appdata";
+        var noHotkeys = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -53,6 +59,9 @@ public sealed class OverlayHostOptions
                     dataDirectory = args[i + 1];
                     i++;
                     break;
+                case "--no-hotkeys":
+                    noHotkeys = true;
+                    break;
                 case "--help" or "-h":
                     PrintUsage();
                     Environment.Exit(0);
@@ -66,6 +75,7 @@ public sealed class OverlayHostOptions
             PollHz = pollHz,
             UseFake = fake,
             DataDirectory = dataDirectory,
+            NoHotkeys = noHotkeys,
         };
     }
 
@@ -77,6 +87,7 @@ public sealed class OverlayHostOptions
           --port <n>       Port to listen on (default 8777).
           --poll-hz <n>    Engine poll rate, 1-120 (default 30).
           --data <dir>     Run history and checkpoints (default ./appdata).
+          --no-hotkeys     Do not register global hotkeys.
           --help           Show this message.
         """);
 }

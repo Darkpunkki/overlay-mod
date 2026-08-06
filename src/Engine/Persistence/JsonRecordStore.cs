@@ -19,6 +19,9 @@ public sealed class JsonRecordStore : IRecordStore
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
+        // Route and split names are user-facing text; keep them readable rather
+        // than escaped into \uXXXX in a file people may open.
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     private readonly string _path;
@@ -54,11 +57,13 @@ public sealed class JsonRecordStore : IRecordStore
     private static PersonalBests Fold(PersonalBests bests, RunRecord run)
     {
         var splitHits = new Dictionary<string, int>(bests.BestSplitHits);
+        var splitDeaths = new Dictionary<string, int>(bests.BestSplitDeaths);
         var splitTimes = new Dictionary<string, int>(bests.BestSplitIgtMs);
 
         foreach (var s in run.Splits)
         {
             splitHits[s.Name] = splitHits.TryGetValue(s.Name, out var h) ? Math.Min(h, s.Hits) : s.Hits;
+            splitDeaths[s.Name] = splitDeaths.TryGetValue(s.Name, out var d) ? Math.Min(d, s.Deaths) : s.Deaths;
 
             // A zero-length split means it was never actually played (an aborted
             // run, or a route edit); it should not become an unbeatable best.
@@ -71,6 +76,7 @@ public sealed class JsonRecordStore : IRecordStore
             Min(bests.BestTotalHits, run.TotalHits),
             Min(bests.BestTotalDeaths, run.TotalDeaths),
             splitHits,
+            splitDeaths,
             splitTimes);
     }
 

@@ -93,6 +93,24 @@ code { background: #000; padding: .1rem .3rem; border-radius: .2rem; font-size: 
 .btn--quiet { background: transparent; color: var(--text); border-color: var(--edge); font-weight: 400; }
 .btn--quiet:hover { border-color: var(--dim); }
 
+/* Bound hotkeys, so they do not have to be looked up in a config file. */
+.keys { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
+
+.key {
+  display: flex;
+  align-items: baseline;
+  gap: .4rem;
+  border: 1px solid var(--edge);
+  border-radius: .35rem;
+  padding: .25rem .55rem;
+  font-size: .8125rem;
+}
+
+.key__combo { font-family: Consolas, ui-monospace, monospace; }
+.key__action { color: var(--dim); text-transform: capitalize; }
+.key.is-inactive { opacity: .55; }
+.key.is-inactive .key__combo { text-decoration: line-through; }
+
 .facts { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 0; }
 .facts dt { color: var(--dim); font-size: .8125rem; }
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; }

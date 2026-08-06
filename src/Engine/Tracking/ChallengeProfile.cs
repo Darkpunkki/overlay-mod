@@ -23,8 +23,12 @@ public enum RunMetric
 /// displays what is relevant to it. A No-Hit runner cares about hits per boss
 /// and the total clock, not per-boss times.
 /// </summary>
-/// <param name="PrimaryMetric">What the run is ranked by, for PB comparison.</param>
-/// <param name="ShowSplitTimes">Show a per-split time column.</param>
+/// <param name="PrimaryMetric">
+/// What the run is ranked by. This is also what each split shows, alongside that
+/// split's personal best — a run ranked by time wants per-split times to compare,
+/// a No-Hit run wants hits. One metric per profile keeps the overlay narrow and
+/// keeps the comparison meaningful.
+/// </param>
 /// <param name="ShowSegmentBreakdown">Show approach and boss hits separately rather than combined.</param>
 /// <param name="ShowDeaths">
 /// Show a separate death total. Off for No-Hit, where a death is a failed run
@@ -35,25 +39,24 @@ public sealed record ChallengeProfile(
     ChallengeType Type,
     string Name,
     RunMetric PrimaryMetric,
-    bool ShowSplitTimes,
     bool ShowSegmentBreakdown,
     bool ShowDeaths)
 {
     public static readonly ChallengeProfile NoHit = new(
         ChallengeType.NoHit, "No-Hit", RunMetric.Hits,
-        ShowSplitTimes: false, ShowSegmentBreakdown: false, ShowDeaths: false);
+        ShowSegmentBreakdown: false, ShowDeaths: false);
 
     public static readonly ChallengeProfile Deathless = new(
         ChallengeType.Deathless, "Deathless", RunMetric.Deaths,
-        ShowSplitTimes: false, ShowSegmentBreakdown: false, ShowDeaths: false);
+        ShowSegmentBreakdown: false, ShowDeaths: false);
 
     public static readonly ChallengeProfile AnyPercent = new(
         ChallengeType.AnyPercent, "Any%", RunMetric.Time,
-        ShowSplitTimes: true, ShowSegmentBreakdown: false, ShowDeaths: true);
+        ShowSegmentBreakdown: false, ShowDeaths: true);
 
     public static readonly ChallengeProfile AllBosses = new(
         ChallengeType.AllBosses, "All Bosses", RunMetric.Time,
-        ShowSplitTimes: true, ShowSegmentBreakdown: true, ShowDeaths: true);
+        ShowSegmentBreakdown: true, ShowDeaths: true);
 
     public static ChallengeProfile For(ChallengeType type) => type switch
     {

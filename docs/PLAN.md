@@ -61,10 +61,11 @@ persists, and the host runs happily before the game exists.
 
 **Done for No-Hit. Incomplete for the time-based profiles.**
 
-- [ ] **Time profiles have no time comparison.** Any% and All Bosses show a
-      split time, but the PB column shows *hits* and `pbIgtMs` is never used, so
-      a time-ranked run cannot see whether it is ahead or behind. The PB column
-      needs to follow the profile's metric.
+- [x] **Split column follows the profile's metric.** Each split shows hits,
+      deaths or time — whichever the challenge is ranked by — against that
+      split's own best. This also fixed Deathless, which had been showing hits
+      per split. All three bests are always sent so the payload shape does not
+      change with the profile.
 - [ ] **No end-of-run state.** A finished run just stops; there is no "run
       complete" treatment and no acknowledgement of a new personal best.
 - [ ] Approach-vs-boss breakdown displays correctly but is **always empty in a
@@ -83,9 +84,12 @@ persists, and the host runs happily before the game exists.
 
 - [ ] **Auto-splitting is unproven**, and 17 of 19 bosses have no known flag id,
       so they split manually. *(needs the game — see below)*
-- [ ] **Global hotkeys.** Now essential rather than polish: with most splits
-      manual, the alternative is alt-tabbing to a browser mid-run, which is
-      unusable. *(Milestone 7)*
+- [x] **Global hotkeys.** `Ctrl+Alt+S/D/R` for start, split and reset, bound via
+      `RegisterHotKey` on a dedicated message-pump thread. Configurable in
+      `appdata/hotkeys.json`, disableable with `--no-hotkeys`, and shown on the
+      control page. A low-level keyboard hook was rejected: it would see every
+      keystroke on the machine, which is both more than this needs and the sort
+      of thing anti-virus software objects to.
 - [ ] **Export** to `.lss`, CSV and JSON, for LiveSplit parity. *(Milestone 6)*
 - [ ] SQLite replacing the JSON store. *Optional — JSON works fine at this
       scale.* *(Milestone 6)*
@@ -94,8 +98,8 @@ persists, and the host runs happily before the game exists.
 
 ### Shortest path to a usable product
 
-Hotkeys and packaging, then one session with the game to fill in the flag ids.
-Everything else is refinement.
+Packaging, then one session with the game to fill in the flag ids. Everything
+else is refinement.
 
 ## Pending live verification
 
