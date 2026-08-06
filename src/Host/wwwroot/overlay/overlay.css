@@ -1,0 +1,155 @@
+/* OverlayMod overlay styling.
+   Milestone 3: readable and driven by real data. Milestone 4 does the visual
+   design pass and adds themes. Everything colour-ish is a custom property so a
+   theme file can override it without touching this sheet. */
+
+:root {
+  --om-font: "Segoe UI", system-ui, sans-serif;
+  --om-font-numeric: "Consolas", ui-monospace, monospace;
+
+  --om-text: #f2f2f2;
+  --om-text-dim: #a8a8a8;
+  --om-plate: rgb(12 12 14 / 72%);
+  --om-plate-edge: rgb(255 255 255 / 8%);
+
+  --om-accent: #d8b25a;      /* active split */
+  --om-boss: #d8685a;        /* boss segment */
+  --om-approach: #5a9dd8;    /* approach segment */
+  --om-done: #6fbf73;
+  --om-bad: #d8685a;
+
+  --om-gap: 8px;
+  --om-radius: 4px;
+}
+
+/* Transparent so OBS composites this straight over gameplay. Individual
+   elements carry their own plate for legibility against bright scenes. */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: var(--om-font);
+  color: var(--om-text);
+}
+
+.overlay {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--om-gap);
+  padding: var(--om-gap);
+  min-width: 260px;
+  /* Text sits over arbitrary game art; a shadow keeps it readable everywhere. */
+  text-shadow: 0 1px 3px rgb(0 0 0 / 90%);
+}
+
+.run,
+.splits,
+.active,
+.totals,
+.status {
+  background: var(--om-plate);
+  border: 1px solid var(--om-plate-edge);
+  border-radius: var(--om-radius);
+  padding: 6px 10px;
+}
+
+/* --- run header --- */
+
+.run__timer {
+  font-family: var(--om-font-numeric);
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.run__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--om-text-dim);
+}
+
+/* --- split list --- */
+
+.splits {
+  list-style: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 14px;
+}
+
+.split__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.split__hits,
+.split__time {
+  font-family: var(--om-font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--om-text-dim);
+}
+
+.split.is-active { color: var(--om-accent); font-weight: 600; }
+.split.is-active .split__hits,
+.split.is-active .split__time { color: var(--om-accent); }
+.split.is-done .split__time { color: var(--om-done); }
+.split.is-pending { color: var(--om-text-dim); }
+
+/* --- active split detail: the approach-vs-boss breakdown --- */
+
+.active__name {
+  font-size: 13px;
+  color: var(--om-text-dim);
+  margin-bottom: 4px;
+}
+
+.active__segments { display: flex; gap: var(--om-gap); }
+
+.seg {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: var(--om-radius);
+  border: 1px solid var(--om-plate-edge);
+}
+
+.seg__label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--om-text-dim); }
+
+.seg__hits {
+  font-family: var(--om-font-numeric);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.seg--approach { border-color: color-mix(in srgb, var(--om-approach) 45%, transparent); }
+.seg--boss { border-color: color-mix(in srgb, var(--om-boss) 45%, transparent); }
+
+/* Highlight whichever segment the player is currently in. */
+.overlay.is-boss-active .seg--boss { background: color-mix(in srgb, var(--om-boss) 22%, transparent); }
+.overlay:not(.is-boss-active) .seg--approach { background: color-mix(in srgb, var(--om-approach) 22%, transparent); }
+
+/* --- totals --- */
+
+.totals { display: flex; gap: 16px; }
+.total { display: flex; gap: 6px; align-items: baseline; }
+.total__label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--om-text-dim); }
+.total__value { font-family: var(--om-font-numeric); font-size: 16px; font-variant-numeric: tabular-nums; }
+.total--hp .total__value.is-low { color: var(--om-bad); }
+
+/* --- connection status: quiet when healthy, never a wall of red in a recording --- */
+
+.status { font-size: 11px; color: var(--om-text-dim); }
+.overlay:not(.is-disconnected) .status { display: none; }

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Engine\OverlayMod.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ASP.NET Core has its own Routing.Route; ours is the only one this
+         project ever means, so bind the name globally rather than aliasing
+         it in every file that touches a run route. -->
+    <Using Include="OverlayMod.Engine.Tracking.Route" Alias="Route" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>OverlayMod.Host</RootNamespace>
+    <!-- Reads a 64-bit game process via the Engine, so must itself be 64-bit. -->
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+</Project>

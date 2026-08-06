@@ -15,11 +15,12 @@ namespace OverlayMod.Engine.GameState;
 ///    (PlayerIns -> module bag -> data module) but the exact data-module field
 ///    offsets must be confirmed against the live game — that's Milestone 1's job.
 /// </summary>
-public sealed class Ds3Reader : IDisposable, IFlagSource
+public sealed class Ds3Reader : ISnapshotSource, IFlagSource
 {
     private const string ProcessName = "darksoulsiii"; // matched case-insensitively
 
     private ProcessMemory? _mem;
+    private int _generation;
 
     private Pointer _gameDataMan = null!;
     private Pointer _loading = null!;
@@ -33,6 +34,16 @@ public sealed class Ds3Reader : IDisposable, IFlagSource
     public Ds3Version Version { get; private set; }
 
     public bool Attached => _mem is { HasExited: false };
+
+    public string Description => Attached ? $"Dark Souls III ({Version})" : "Dark Souls III (not attached)";
+
+    /// <summary>
+    /// Bumped on every successful attach. A new attach means a new game session,
+    /// so whatever run was in progress no longer refers to anything real.
+    /// </summary>
+    public int Generation => _generation;
+
+    IFlagSource ISnapshotSource.Flags => this;
 
     /// <summary>
     /// Find the process and resolve pointers. Returns false if the game isn't
@@ -72,6 +83,7 @@ public sealed class Ds3Reader : IDisposable, IFlagSource
             _eventFlagManStatic = mem.ScanRelative(Ds3Signatures.SprjEventFlagMan, 3, 11) ?? 0;
 
             _mem = mem;
+            _generation++;
             return true;
         }
         catch

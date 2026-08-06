@@ -24,8 +24,9 @@ they will be filled in as each becomes next.
 | Player HP / MaxHP | **Working, verified live** (2026-06-30) |
 | Event-flag reads (boss defeats) | **Implemented, never verified against the game** |
 | Boss HP / boss-fight-active | **Not found.** No offset, no candidate |
-| `RunTracker` state machine | **Working**, 10 unit tests pass |
-| Anything on screen | **Does not exist yet** |
+| `RunTracker` state machine | **Working**, unit tested |
+| Host, SSE stream, fake source | **Working** (Milestone 3), 17 unit tests pass |
+| Overlay page | **Renders real data**; visual design pass is Milestone 4 |
 
 Two consequences worth internalising:
 
@@ -70,7 +71,20 @@ Decisions not yet made. Flagged here rather than silently assumed.
 
 ---
 
-## Milestone 3 — Server & live data
+## Milestone 3 — Server & live data ✅
+
+**Built. Three deviations from the design below, all deliberate:**
+
+- **No `Ds3SnapshotSource` adapter.** `Ds3Reader` already had exactly the shape
+  `ISnapshotSource` needed, so it implements the interface directly. An adapter
+  would have been pure indirection.
+- **`ISnapshotSource.Generation` was added**, which the original design missed.
+  Something has to say "this is a new session, discard the run" — a re-attach to
+  the game, or the fake script looping. Without it the demo run never resets.
+- **`HostOptions` is named `OverlayHostOptions`**, and `Route` is bound via a
+  global using alias in the host `.csproj`. ASP.NET Core ships its own
+  `HostOptions` and `Routing.Route`; shadowing framework names invites
+  confusion later.
 
 Get tracker state out of the process and onto a URL, and make the whole thing
 runnable **without Dark Souls III**, so the UI can be built at any hour without
@@ -97,14 +111,16 @@ host, so OBS points at one URL and nothing needs CORS.
 | Path | Purpose |
 |---|---|
 | `src/Host/OverlayMod.Host.csproj` | ASP.NET Core (`Microsoft.NET.Sdk.Web`), net8.0 |
-| `src/Host/Program.cs` | Minimal API: static files, `/events`, `/api/state` |
+| `src/Host/Program.cs` | Minimal API: static files, `/events`, `/api/state`, `/api/run/*` |
 | `src/Host/EngineLoop.cs` | `BackgroundService`: poll → tracker → broadcast |
 | `src/Host/StateBroadcaster.cs` | Fan-out to connected SSE clients |
-| `src/Host/HostOptions.cs` | Port, poll rate, source selection (`--fake`) |
+| `src/Host/RunController.cs` | Owns run state; serialises loop and HTTP access |
+| `src/Host/OverlayState.cs` | The view model and its projection |
+| `src/Host/DemoRoute.cs` | Placeholder route until routes load from disk |
+| `src/Host/OverlayHostOptions.cs` | Port, poll rate, source selection (`--fake`) |
 | `src/Engine/GameState/ISnapshotSource.cs` | The seam |
-| `src/Engine/GameState/Ds3SnapshotSource.cs` | Adapter over `Ds3Reader` |
 | `src/Engine/GameState/FakeSnapshotSource.cs` | Scripted run for development |
-| `src/Host/wwwroot/overlay/index.html` | Placeholder page, fleshed out in M4 |
+| `src/Host/wwwroot/overlay/` | `index.html`, `overlay.css`, `overlay.js` |
 | `tests/Engine.Tests/FakeSnapshotSourceTests.cs` | Script produces expected run |
 
 ### Data contract
@@ -117,6 +133,8 @@ internals without breaking the page. Emitted as camelCase JSON on every tick:
 {
   "attached": true,
   "phase": "Running",              // NotStarted | Running | Finished
+  "routeName": "Demo (first three bosses)",
+  "profileName": "No-Hit",
   "runIgtMs": 754320,
   "totalHits": 3,
   "totalDeaths": 0,
@@ -146,21 +164,26 @@ stateless, makes reconnection free, and is trivially cheap at this size.
 
 ### Tasks
 
-- [ ] `ISnapshotSource` + adapt `Ds3Reader` behind it (no behaviour change)
-- [ ] `FakeSnapshotSource`: scripted run with timed HP drops, a death, and boss
+- [x] `ISnapshotSource`, implemented directly by `Ds3Reader`
+- [x] `FakeSnapshotSource`: scripted run with timed HP drops, a death, and boss
       flag transitions, looping so the UI always has motion
-- [ ] Host project, referenced from `OverlayMod.sln`
-- [ ] `EngineLoop` at ~30 Hz driving `RunTracker`
-- [ ] View-model projection + camelCase serialisation
-- [ ] `GET /events` (SSE) and `GET /api/state` (one-shot, for debugging)
-- [ ] Static file serving for `wwwroot/`
-- [ ] `--fake` flag; default to real game, fall back gracefully when not attached
-- [ ] Unit tests for the fake source and the projection
+- [x] Host project, referenced from `OverlayMod.sln`
+- [x] `EngineLoop` at 30 Hz driving `RunTracker`, with throttled attach retry
+- [x] View-model projection + camelCase serialisation
+- [x] `GET /events` (SSE) and `GET /api/state` (one-shot, for debugging)
+- [x] `POST /api/run/{start,split,reset}` for manual control
+- [x] Static file serving for `wwwroot/`
+- [x] `--fake` flag; default to real game, fall back gracefully when not attached
+- [x] Unit tests for the fake source and the tracker's reading of it
 
 ### Done when
 
 `dotnet run --project src/Host -- --fake`, then `localhost:PORT/overlay` in
 Chrome shows numbers moving, with DS3 not running.
+
+**Verified.** The stream delivers ~31 events/second, IGT tracks wall time, and
+one pass of the demo script produces 9 hits, 1 death and three auto-split boss
+kills — matching the unit tests.
 
 ---
 
