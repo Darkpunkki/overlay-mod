@@ -22,6 +22,7 @@
     factSplit: el("factSplit"),
     overlayUrl: el("overlayUrl"),
     hotkeys: el("hotkeys"),
+    quit: el("quit"),
     toast: el("toast"),
   };
 
@@ -206,6 +207,19 @@
   stream.onmessage = (event) => {
     try { renderLive(JSON.parse(event.data)); } catch { /* ignore a bad frame */ }
   };
+
+  dom.quit.addEventListener("click", async () => {
+    if (!window.confirm("Stop OverlayMod? The overlay will go blank in OBS.")) return;
+    try {
+      await post("/api/quit");
+      // The host is on its way down, so the stream is about to die; say so
+      // rather than letting the page look broken.
+      stream.close();
+      toast("OverlayMod is shutting down. You can close this tab.");
+    } catch {
+      toast("Shutdown request failed — the host may already have stopped.");
+    }
+  });
 
   loadCatalogue().catch((err) => toast(`Could not load routes: ${err.message}`));
   loadHotkeys().catch(() => { /* hotkeys are optional; the buttons still work */ });

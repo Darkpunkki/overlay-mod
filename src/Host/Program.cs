@@ -160,6 +160,16 @@ app.MapGet("/api/hotkeys", (HotkeyService hotkeys) => Results.Ok(new
     bindings = hotkeys.Bindings.Select(b => new { action = b.Action, key = b.Key, active = b.Active }),
 }));
 
+// Shut the host down. The tray icon can do this too, but it hides behind the
+// notification-area overflow arrow, and a windowed process ignores Ctrl+C — so
+// without this the only way out is Task Manager.
+app.MapPost("/api/quit", (IHostApplicationLifetime lifetime, ILogger<Program> log) =>
+{
+    log.LogInformation("Shutdown requested from the control page.");
+    lifetime.StopApplication();
+    return Results.Ok(new { stopping = true });
+});
+
 // Manual run control, mirroring LiveSplit's hotkeys. The same actions the global
 // hotkeys trigger, for when a browser is more convenient.
 var run = app.MapGroup("/api/run");

@@ -10,6 +10,7 @@
 // Query parameters:
 //   ?theme=<name>   load themes/<name>.css over the defaults
 //   ?scale=<n>      scale the whole overlay (0.5 - 4)
+//   ?splits=<n>     how many split rows to show at once (3 - 30)
 
 (() => {
   "use strict";
@@ -34,9 +35,10 @@
     status: el("status"),
   };
 
-  // How many splits to show around the active one, LiveSplit style.
-  const WINDOW_BEFORE = 2;
-  const WINDOW_AFTER = 3;
+  // How many split rows to show at once, LiveSplit style. The list stays this
+  // tall no matter how long the route is, so a 25-boss route needs no more room
+  // than a 3-boss one. Override with ?splits=N.
+  let visibleSplits = 6;
 
   // Treat the stream as dead if nothing arrives for this long. The host ticks
   // at 30Hz, so this is a very generous margin.
@@ -55,6 +57,9 @@
     if (Number.isFinite(scale) && scale > 0) {
       document.documentElement.style.setProperty("--om-scale", Math.min(Math.max(scale, 0.5), 4));
     }
+
+    const splits = Number.parseInt(params.get("splits") ?? "", 10);
+    if (Number.isFinite(splits)) visibleSplits = Math.min(Math.max(splits, 3), 30);
 
     // Only ever build a same-origin path from a restricted character set, so a
     // crafted URL cannot pull in a stylesheet from somewhere else.
@@ -97,10 +102,13 @@
   // Which slice of the split list to show, clamped to the ends so the list
   // stays a constant height instead of shrinking at the start and finish.
   function windowSplits(splits, activeIndex) {
-    const size = WINDOW_BEFORE + WINDOW_AFTER + 1;
+    const size = visibleSplits;
     if (splits.length <= size) return { from: 0, to: splits.length };
-    let from = activeIndex - WINDOW_BEFORE;
-    from = Math.max(0, Math.min(from, splits.length - size));
+
+    // Sit the active split about a third of the way down, so there is more
+    // room ahead of it than behind — what is coming matters more.
+    const before = Math.floor((size - 1) / 3);
+    const from = Math.max(0, Math.min(activeIndex - before, splits.length - size));
     return { from, to: from + size };
   }
 

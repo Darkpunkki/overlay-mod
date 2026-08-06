@@ -88,6 +88,10 @@ and settings are written to an `appdata` folder beside the executable.
 For development, `dotnet run --project src/Host` keeps a console and prints its
 logs there instead.
 
+> **First time testing against the real game?** Follow
+> **[docs/LIVE-TESTING.md](docs/LIVE-TESTING.md)** — it covers launching offline
+> without EAC, and a checklist of what has never been confirmed on real hardware.
+
 ## Playing a tracked run
 
 1. **Launch Dark Souls III offline with EAC disabled.** Non-negotiable — see the
@@ -99,9 +103,13 @@ logs there instead.
    challenge (No-Hit, Deathless, Any%, All Bosses) and the route. The choice is
    remembered for next time.
 4. **OBS is only needed if you want it in a recording.** Add a Browser Source
-   pointing at <http://127.0.0.1:8777/overlay/>, size it to your canvas, and put
-   it above your game capture. To just watch it yourself, open that URL in a
-   browser instead.
+   pointing at <http://127.0.0.1:8777/overlay/> at about **500×420**, and drag it
+   above your game capture in the Sources list — the topmost source draws in
+   front. To just watch it yourself, open that URL in a browser instead.
+
+   The split list shows a fixed number of rows and scrolls through the route as
+   you go, so a 25-boss route needs no more height than a 3-boss one. Use
+   `?splits=10` for a taller list.
 5. **Play.** The run starts when you load into the world. Quitting the game
    pauses the timer; loading back in resumes the same run.
 
@@ -133,6 +141,14 @@ dotnet run --project src/Host -- --fake
 | `--no-tray` | Do not show a notification-area icon |
 | `?theme=<name>` | Overlay URL option: `minimal` or `light` |
 | `?scale=<n>` | Overlay URL option: scale the overlay, e.g. `1.5` |
+| `?splits=<n>` | Overlay URL option: split rows shown at once (default 6) |
+
+### Stopping it
+
+OverlayMod runs in the background, so closing a terminal will not stop it and
+`Ctrl+C` does nothing. Use **Quit OverlayMod** on the control page, or
+right-click the notification-area icon (behind the **^** arrow by the clock) and
+choose **Exit**.
 
 ## Challenges and routes
 

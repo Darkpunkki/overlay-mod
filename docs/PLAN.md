@@ -55,6 +55,10 @@ persists, and the host runs happily before the game exists.
 - [x] **Packaging.** `scripts/publish.ps1` builds a single self-contained
       `OverlayMod.exe` with a notification-area icon, a file log, and pages
       embedded in the assembly so there is no loose asset folder to lose.
+- [x] **A discoverable way to quit.** First real use turned up that a windowed
+      process ignores `Ctrl+C`, survives closing its terminal, and hides its tray
+      icon behind the notification-area overflow arrow — leaving Task Manager as
+      the only exit. The control page now has a Quit button.
 - [ ] Route editor, so custom routes do not mean hand-editing JSON. *Optional.*
 
 ### 2. Complete visuals, differing per challenge
@@ -74,11 +78,12 @@ persists, and the host runs happily before the game exists.
 
 ### 3. Visible in a window, and composited into a recording
 
-**Believed working, never actually verified.**
+**Done.** Confirmed in OBS 32.2.1 on 2026-08-06: the overlay composites over a
+Browser Source and survives into a recorded file. That was the Milestone 4
+done-criterion.
 
-- [ ] **Nobody has run it in OBS.** Transparency, sizing, and absence of
-      scrollbars in a Browser Source are all unconfirmed. This is the Milestone 4
-      done-criterion and needs OBS, though not the game.
+- [x] Verified in OBS against a dark background.
+- [ ] Worth a second look over bright scenes once a real game is behind it.
 
 ### 4. The project's other stated goals
 
@@ -116,6 +121,10 @@ work that does not touch it.
 | 4 | **Boss-defeat flag ids** | Kill any boss and watch its split advance, or `GET /api/flags?ids=…` to check one directly | All 25 ids are now filled in from the published table, and the two already known match it — but none have been seen flipping in a real run |
 | 5 | **Player-loaded timing** | Watch when `player` flips true relative to regaining control | Decides whether runs start slightly early, during the fade-in |
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
+
+**[docs/LIVE-TESTING.md](LIVE-TESTING.md) is the walkthrough for this** — how to
+launch offline without EAC, and each check written as a pass/fail with what to
+report back.
 
 Checks 1–3 and 5 are observation only and need nothing but the spike running.
 Check 4 is what `GET /api/flags?ids=…` exists for — it reads arbitrary event
