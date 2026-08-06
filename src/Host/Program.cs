@@ -141,6 +141,15 @@ app.MapPost("/api/routes/reload", (RouteStore routes) =>
     return Results.Ok(new { routes = routes.All.Count });
 });
 
+// Write any built-in route that is missing. Routes are only seeded into an empty
+// directory, so this is how a newly added built-in reaches an existing install -
+// and how to undo deleting one by mistake.
+app.MapPost("/api/routes/restore", (RouteStore routes) =>
+{
+    var added = routes.RestoreBuiltIns();
+    return Results.Ok(new { added, routes = routes.All.Count });
+});
+
 // Read arbitrary event flags. This exists for the live verification session:
 // boss-defeat flag ids are mostly unconfirmed, and watching candidates flip
 // while killing a boss is how they get confirmed.

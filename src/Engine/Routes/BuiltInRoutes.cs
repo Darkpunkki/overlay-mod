@@ -84,6 +84,32 @@ public static class BuiltInRoutes
     { FlagsVerified = false };
 
     /// <summary>
+    /// The bosses a normal completion actually goes through. Dark Souls III can
+    /// be finished without killing everything, so an all-bosses list is the wrong
+    /// shape for most runs — this is the shorter path to the Kiln.
+    /// </summary>
+    public static RouteFile Quick => new(
+        "Quick route",
+        ChallengeType.NoHit,
+        new[]
+        {
+            IudexGundyr,
+            Vordt,
+            AbyssWatchers,
+            Wolnir,
+            Dancer,
+            CrystalSage,
+            Deacons,
+            Pontiff,
+            Yhorm,
+            Aldrich,
+            DragonslayerArmour,
+            TwinPrinces,
+            SoulOfCinder,
+        })
+    { FlagsVerified = false };
+
+    /// <summary>
     /// The three bosses the scripted fake source plays through, for developing
     /// against <c>--fake</c> without the game.
     /// </summary>
@@ -93,5 +119,5 @@ public static class BuiltInRoutes
         new[] { IudexGundyr, Vordt, Greatwood })
     { FlagsVerified = false };
 
-    public static IReadOnlyList<RouteFile> All => new[] { AllBosses, AllBossesWithDlc, Demo };
+    public static IReadOnlyList<RouteFile> All => new[] { Quick, AllBosses, AllBossesWithDlc, Demo };
 }

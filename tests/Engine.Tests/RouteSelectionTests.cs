@@ -101,6 +101,50 @@ public class RouteSelectionTests : IDisposable
     }
 
     [Fact]
+    public void RestoringWritesBackOnlyTheMissingBuiltIns()
+    {
+        var store = new RouteStore(RoutesDir);
+        var before = store.All.Count;
+
+        foreach (var f in Directory.GetFiles(RoutesDir, "*.json"))
+            if (File.ReadAllText(f).Contains(BuiltInRoutes.Quick.Name)) File.Delete(f);
+        store.Reload();
+        Assert.Null(store.Find(BuiltInRoutes.Quick.Name));
+
+        Assert.Equal(1, store.RestoreBuiltIns());
+        Assert.NotNull(store.Find(BuiltInRoutes.Quick.Name));
+        Assert.Equal(before, store.All.Count);
+
+        // Nothing missing the second time.
+        Assert.Equal(0, store.RestoreBuiltIns());
+    }
+
+    [Fact]
+    public void RestoringLeavesEditedRoutesAlone()
+    {
+        var store = new RouteStore(RoutesDir);
+        var path = Directory.GetFiles(RoutesDir, "*.json")[0];
+        var edited = File.ReadAllText(path).Replace("\"isBoss\": true", "\"isBoss\": false");
+        File.WriteAllText(path, edited);
+
+        store.RestoreBuiltIns();
+
+        Assert.Equal(edited, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void TheQuickRouteIsTheShorterPathToTheKiln()
+    {
+        var quick = BuiltInRoutes.Quick;
+
+        Assert.Equal(13, quick.Splits.Count);
+        Assert.Equal("Iudex Gundyr", quick.Splits[0].Name);
+        Assert.Equal("Soul of Cinder", quick.Splits[^1].Name);
+        Assert.True(quick.Splits.Count < BuiltInRoutes.AllBosses.Splits.Count);
+        Assert.Equal(quick.Splits.Count, quick.AutoSplitCount);
+    }
+
+    [Fact]
     public void AMalformedRouteFileIsSkippedRatherThanLosingTheOthers()
     {
         new RouteStore(RoutesDir);

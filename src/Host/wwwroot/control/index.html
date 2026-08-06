@@ -26,7 +26,15 @@
         edit them freely, then reload.
       </p>
       <div class="choices choices--stack" id="routes"></div>
-      <button class="btn btn--quiet" id="reload" type="button">Reload from disk</button>
+      <div class="row">
+        <button class="btn btn--quiet" id="reload" type="button">Reload from disk</button>
+        <button class="btn btn--quiet" id="restore" type="button">Restore built-in routes</button>
+      </div>
+      <p class="hint">
+        Built-in routes are only written when the folder is empty, so deleting one
+        keeps it deleted. <strong>Restore</strong> writes back any that are
+        missing — including routes added in a newer version.
+      </p>
     </section>
 
     <section class="card">

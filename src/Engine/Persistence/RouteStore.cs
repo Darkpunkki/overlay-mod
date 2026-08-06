@@ -88,11 +88,45 @@ public sealed class RouteStore
     }
 
     /// <summary>
+    /// Write any built-in route that is not already on disk, and reload.
+    /// Returns how many were added.
+    ///
+    /// This is the deliberate counterpart to <see cref="Seed"/> only running on
+    /// an empty directory: automatic seeding would resurrect routes the user
+    /// deleted, so instead new built-ins — and ones removed by accident — arrive
+    /// when explicitly asked for.
+    /// </summary>
+    public int RestoreBuiltIns()
+    {
+        var added = 0;
+
+        try
+        {
+            Directory.CreateDirectory(_directory);
+            foreach (var route in BuiltInRoutes.All)
+            {
+                if (Find(route.Name) is not null) continue;
+
+                var path = Path.Combine(_directory, FileNameFor(route.Name));
+                if (File.Exists(path)) continue;
+
+                File.WriteAllText(path, JsonSerializer.Serialize(route, Json));
+                added++;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        if (added > 0) Reload();
+        return added;
+    }
+
+    /// <summary>
     /// Write the built-in routes, but only when there are no route files at all.
     /// Seeding per-missing-file would resurrect a built-in the user deliberately
-    /// deleted, leaving no way to be rid of it. The cost is that built-ins added
-    /// in a later version do not appear for an existing install — an acceptable
-    /// trade for the directory staying as the user left it.
+    /// deleted, leaving no way to be rid of it. New built-ins reach an existing
+    /// install through <see cref="RestoreBuiltIns"/> instead.
     /// </summary>
     private void Seed()
     {

@@ -151,6 +151,13 @@ public sealed class RunController
                 // uses these to stop the clock and to disarm HP tracking, so a
                 // reload at different health is not mistaken for a hit.
                 _tracker.Update(snapshot, flags);
+
+                // Leaving the world at all - a loading screen, quitting to the
+                // main menu, or closing the game - means the next time we are in
+                // play we cannot assume it is the same run. Quitting to the menu
+                // and starting a new character keeps the same process, so
+                // without this the old run simply carried on with its hits.
+                _awaitingResumeDecision = true;
                 return;
             }
 

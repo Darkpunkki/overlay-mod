@@ -170,9 +170,20 @@ edited. Add or reorder splits, then hit **Reload from disk** on the control page
 A split carries the boss-defeat event flag that auto-advances it; a split with no
 flag has to be advanced manually with the **Split** button.
 
-Three routes ship: **All Bosses (main game)**, **All Bosses (with DLC)** and a
-**Demo** route used by `--fake`. Every boss carries its defeat flag, so all
-splits can auto-advance.
+Four routes ship:
+
+| Route | Splits | For |
+|---|---|---|
+| **Quick route** | 13 | A normal completion — the shorter path to the Kiln |
+| **All Bosses (main game)** | 19 | Everything in the base game |
+| **All Bosses (with DLC)** | 25 | Base game plus both DLCs |
+| **Demo (first three bosses)** | 3 | Used by `--fake`; no game needed |
+
+Every boss carries its defeat flag, so all splits can auto-advance.
+
+Built-in routes are written only when the routes folder is empty, so a route you
+delete stays deleted. **Restore built-in routes** on the control page writes back
+any that are missing — including ones added in a newer version.
 
 > ⚠️ **Auto-splitting has not been confirmed on a live game yet.** The flag ids
 > are the game's own constants and cross-check against the two values already

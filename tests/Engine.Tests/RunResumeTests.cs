@@ -41,6 +41,14 @@ public class RunResumeTests : IDisposable
         IgtMs = igt,
     };
 
+    private static GameSnapshot Loading(int igt) => new()
+    {
+        Attached = true,
+        PlayerLoaded = false,
+        IsLoading = true,
+        IgtMs = igt,
+    };
+
     private sealed class NoRecords : IRecordStore
     {
         public PersonalBests BestsFor(string routeName) => PersonalBests.Empty;
@@ -190,6 +198,65 @@ public class RunResumeTests : IDisposable
         var state = c.Project(Play(12_000, 1000));
         Assert.Equal("Running", state.Phase);
         Assert.Equal(0, state.TotalHits);
+    }
+
+    [Fact]
+    public void QuittingToTheMenuAndStartingANewCharacterBeginsANewRun()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        c.Tick(Play(50_000, 1000), flags, 0);
+        c.Tick(Play(51_000, 900), flags, 0);       // a hit on the old run
+        Assert.Equal(1, HitsOf(c, Play(51_000, 900)));
+
+        // Quit to the main menu *without closing the game*: same process, same
+        // source generation, so nothing about the connection changes.
+        c.Tick(Menu(51_000), flags, 0);
+        c.Tick(Menu(51_000), flags, 0);
+
+        // Start a new character - its in-game time begins near zero.
+        c.Tick(Play(800, 1000), flags, 0);
+
+        var state = c.Project(Play(800, 1000));
+        Assert.Equal("Running", state.Phase);
+        Assert.Equal(0, state.TotalHits);
+    }
+
+    [Fact]
+    public void QuittingToTheMenuAndContinuingTheSameCharacterKeepsTheRun()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        c.Tick(Play(50_000, 1000), flags, 0);
+        c.Tick(Play(51_000, 900), flags, 0);
+
+        c.Tick(Menu(51_000), flags, 0);
+
+        // Same save, so in-game time picks up where it stopped.
+        c.Tick(Play(51_000, 1000), flags, 0);
+
+        Assert.Equal(1, HitsOf(c, Play(51_000, 1000)));
+    }
+
+    [Fact]
+    public void ALoadingScreenDoesNotStartANewRun()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        c.Tick(Play(50_000, 1000), flags, 0);
+        c.Tick(Play(51_000, 900), flags, 0);
+
+        // A bonfire warp: out of play, then back, with time moving forward.
+        c.Tick(Loading(51_000), flags, 0);
+        c.Tick(Loading(51_000), flags, 0);
+        c.Tick(Play(51_500, 1000), flags, 0);
+
+        var state = c.Project(Play(51_500, 1000));
+        Assert.Equal("Running", state.Phase);
+        Assert.Equal(1, state.TotalHits);
     }
 
     // --- surviving a host restart ---

@@ -115,9 +115,11 @@ work that does not touch it.
 
 | # | What | How to check | Why it matters |
 |---|---|---|---|
-| 1 | **Event-flag reads** | Load a save past Iudex Gundyr; the spike's `IudexGundyr` column should read `DEAD` | All auto-splitting depends on it |
+| 0 | ~~**Attaching at all**~~ | ✅ **Confirmed 2026-08-06** on game version **1.15.2.0** — AOB scanning and pointer resolution work | — |
+| 0b | ~~**Timer and hit counting**~~ | ✅ **Confirmed** — the timer starts on a new game and hits register | — |
+| 1 | **Event-flag reads** | Kill any boss and watch the split advance | All auto-splitting depends on it |
 | 2 | **IGT persists across a restart** | Note IGT, quit to desktop, relaunch, load in; IGT should resume at or above the noted value | The entire resume-a-run feature rests on this |
-| 3 | **IGT at the main menu** | Watch the spike's IGT while sitting at the menu | The tracker assumes menu IGT is meaningless and ignores it; if it reads as a huge or negative value the resume comparison needs a guard |
+| 3 | **IGT at the main menu** | Watch IGT while sitting at the menu | The tracker assumes menu IGT is meaningless and ignores it; if it reads as a huge or negative value the resume comparison needs a guard |
 | 4 | **Boss-defeat flag ids** | Kill any boss and watch its split advance, or `GET /api/flags?ids=…` to check one directly | All 25 ids are now filled in from the published table, and the two already known match it — but none have been seen flipping in a real run |
 | 5 | **Player-loaded timing** | Watch when `player` flips true relative to regaining control | Decides whether runs start slightly early, during the fade-in |
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
@@ -182,6 +184,11 @@ Decisions not yet made. Flagged here rather than silently assumed.
 - **Changing either abandons the run in progress.** The splits, or the thing
   being measured, have changed — carrying the old numbers forward would be
   meaningless.
+- **Leaving the world always re-checks whether the run continues.** Not just a
+  re-attach: quitting to the main menu and starting a new character keeps the
+  same process alive, and originally the old run simply carried on with its hits
+  intact. Any transition out of play — menu, loading screen or quit — now re-runs
+  the in-game-time comparison on the way back in. Found in live testing.
 - **A run is never automatically failed.** A hit under No-Hit, or a death under
   Deathless, does not end the run — players want to finish an attempt even after
   it stops being a clean one, and the personal-best comparison is what tells them

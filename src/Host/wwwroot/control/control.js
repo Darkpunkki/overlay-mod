@@ -13,6 +13,7 @@
     challenges: el("challenges"),
     routes: el("routes"),
     reload: el("reload"),
+    restore: el("restore"),
     start: el("start"),
     split: el("split"),
     reset: el("reset"),
@@ -185,6 +186,18 @@
       toast(`Reloaded ${routes} route${routes === 1 ? "" : "s"}`);
     } catch (err) {
       toast(`Reload failed: ${err.message}`);
+    }
+  });
+
+  dom.restore.addEventListener("click", async () => {
+    try {
+      const { added } = await post("/api/routes/restore");
+      await loadCatalogue();
+      toast(added > 0
+        ? `Added ${added} built-in route${added === 1 ? "" : "s"}`
+        : "Nothing missing — all built-in routes are already here");
+    } catch (err) {
+      toast(`Restore failed: ${err.message}`);
     }
   });
 
