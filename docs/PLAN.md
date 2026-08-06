@@ -42,6 +42,25 @@ Neither blocks Milestones 3 or 4.
 
 ---
 
+## Pending live verification
+
+Everything here is written, unit-tested where it can be, and **unproven against
+the real game**. Deliberately batched rather than checked one at a time, so a
+single session with DS3 running can clear the lot. Nothing in this list blocks
+work that does not touch it.
+
+| # | What | How to check | Why it matters |
+|---|---|---|---|
+| 1 | **Event-flag reads** | Load a save past Iudex Gundyr; the spike's `IudexGundyr` column should read `DEAD` | All auto-splitting depends on it |
+| 2 | **IGT persists across a restart** | Note IGT, quit to desktop, relaunch, load in; IGT should resume at or above the noted value | The entire resume-a-run feature rests on this |
+| 3 | **IGT at the main menu** | Watch the spike's IGT while sitting at the menu | The tracker assumes menu IGT is meaningless and ignores it; if it reads as a huge or negative value the resume comparison needs a guard |
+| 4 | **Boss-defeat flag ids** | Kill Vordt and Greatwood, watch their flags flip | Only Iudex's `14000800` came from a known-good source; the others were inferred from the numbering pattern |
+| 5 | **Player-loaded timing** | Watch when `player` flips true relative to regaining control | Decides whether runs start slightly early, during the fade-in |
+| 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
+
+Checks 1–5 are observation only and need nothing but the spike running. Check 6
+is a research task, not a verification.
+
 ## Open questions
 
 Decisions not yet made. Flagged here rather than silently assumed.
@@ -74,8 +93,14 @@ Decisions not yet made. Flagged here rather than silently assumed.
   means a different or fresh character and a new run starts. A *finished* run is
   always replaced on return — loading back in is the next attempt.
 - **The profile decides what is displayed**, not the page. No-Hit shows combined
-  hits per split and no per-split times; time-based profiles show times. Every
-  metric is still recorded underneath regardless of what is shown.
+  hits per split, with no per-split times, no approach/boss breakdown and no
+  death counter — a death there is a failed run, not a statistic. Time-based
+  profiles show times and deaths. Every metric is still recorded underneath
+  regardless of what is shown.
+- **Health is never displayed, on any profile.** The game's own UI already shows
+  it, so repeating it costs overlay space and viewer attention for nothing. HP is
+  still read — hits and deaths are derived from it — but it does not reach the
+  view model at all.
 - **Personal bests are per-split as well as per-run** ("gold splits"), so the
   overlay can show progress against the best each boss has *ever* been rather
   than only against one best run.
@@ -149,8 +174,10 @@ internals without breaking the page. Emitted as camelCase JSON on every tick:
   "runIgtMs": 754320,
   "totalHits": 3,
   "totalDeaths": 0,
-  "primary": { "metric": "Hits", "value": 3 },   // per challenge profile
-  "player": { "hp": 412, "maxHp": 1050, "loaded": true, "loading": false },
+  "primary": { "metric": "Hits", "value": 3, "best": 9 },   // per challenge profile
+  "display": { "showSplitTimes": false, "showSegmentBreakdown": false, "showDeaths": false },
+  "player": { "loaded": true, "loading": false },
+  "bests": { "runIgtMs": 92498, "totalHits": 9, "totalDeaths": 1 },
   "bossFightActive": false,
   "activeIndex": 2,
   "splits": [
@@ -163,8 +190,8 @@ internals without breaking the page. Emitted as camelCase JSON on every tick:
       "deaths": 0,
       "approach": { "igtMs": 120000, "hits": 0, "deaths": 0 },
       "boss":     { "igtMs":  60000, "hits": 1, "deaths": 0 },
-      "pbIgtMs": null,             // null until Milestone 6
-      "pbHits": null
+      "pbIgtMs": 27493,            // best this split has ever been
+      "pbHits": 3
     }
   ]
 }
@@ -203,41 +230,53 @@ kills — matching the unit tests.
 A transparent-background page that looks correct layered over gameplay, built
 entirely against the fake source.
 
-### New files
+### Files
 
 | Path | Purpose |
 |---|---|
 | `src/Host/wwwroot/overlay/index.html` | Structure |
 | `src/Host/wwwroot/overlay/overlay.css` | Layout + theme via CSS custom properties |
 | `src/Host/wwwroot/overlay/overlay.js` | SSE subscribe, render, reconnect |
-| `src/Host/wwwroot/overlay/themes/*.css` | Alternate looks, opt-in by query string |
+| `src/Host/wwwroot/overlay/themes/minimal.css` | No plates, text on the capture |
+| `src/Host/wwwroot/overlay/themes/light.css` | Dark text on a pale plate |
 
 ### Layout
 
 Roughly LiveSplit's vertical stack, since that is what viewers already parse:
 
-- **Run timer** — large, top or bottom, IGT.
-- **Split list** — name, time, completed/active/pending states. Active split
-  highlighted; the list windows around it rather than showing all of them.
-- **Active split detail** — the differentiator. Approach hits versus boss hits,
-  shown separately, with deaths.
-- **Run totals** — hits, deaths, and whichever metric the profile ranks by.
-- **Disconnected state** — a quiet indicator when `attached` is false, not a
-  wall of errors baked into a recording.
+- **Run timer** — large, top, IGT.
+- **Split list** — name, hits, personal best, and a time column only for
+  profiles that want it. Active split carries an accent bar; the list windows
+  around it rather than showing all of them.
+- **Active split detail** — approach hits versus boss hits. Shown only for
+  profiles that ask for it; hidden on No-Hit.
+- **Run totals** — the profile's primary metric with its personal best
+  alongside, plus deaths where the profile shows them.
+- **Status line** — one quiet line when the stream drops or the game is absent,
+  not a wall of errors baked into a recording.
 
 Requirements: `body { background: transparent }`, no scrollbars, no reliance on
 hover or interaction, and legibility over both bright and dark scenes — text
 needs a shadow or plate, since Firelink Shrine and the Ringed City are very
 different backdrops.
 
+Sizes are in `rem` against a root font size scaled by `--om-scale`, so
+`?scale=1.5` enlarges the overlay proportionally instead of OBS stretching and
+blurring a bitmap. `?theme=<name>` loads `themes/<name>.css`; the name is
+matched against `^[a-z0-9-]{1,32}$` so a crafted URL cannot pull in a stylesheet
+from elsewhere.
+
 ### Tasks
 
-- [ ] SSE client with automatic reconnect and a stale-data indicator
-- [ ] Timer formatting shared with the engine's conventions (`h:mm:ss.mmm`)
-- [ ] Split list rendering with windowing around the active split
-- [ ] Approach/boss hit breakdown for the active split
-- [ ] Theme via CSS custom properties; one alternate theme to prove it works
-- [ ] Transparency and no-scrollbar verification in an actual Browser Source
+- [x] SSE client with automatic reconnect and a stale-data indicator
+- [x] Timer formatting matching the engine's conventions (`h:mm:ss.mmm`)
+- [x] Split list rendering with windowing around the active split
+- [x] Personal-best column, with the live value coloured against it
+- [x] Approach/boss hit breakdown, for profiles that show it
+- [x] Profile-driven display: split times, breakdown and deaths all conditional
+- [x] Theme via CSS custom properties, plus `?theme=` and `?scale=`
+- [ ] **Needs a browser:** transparency, no scrollbars, legibility, layout
+- [ ] **Needs OBS + the game:** the recording that defines "done"
 
 ### Done when
 

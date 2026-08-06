@@ -1,0 +1,22 @@
+/* Minimal theme: no plates, just text floating on the capture.
+   Use ?theme=minimal. Leans entirely on text shadow for legibility, so it
+   suits scenes where a solid panel would fight the composition. */
+
+:root {
+  --om-plate: transparent;
+  --om-plate-edge: transparent;
+  /* Heavier than the default: with no plate behind it, the shadow is the only
+     thing keeping text readable over a bright sky or a fire. */
+  --om-shadow: 0 0 0.25rem rgb(0 0 0 / 95%), 0 2px 4px rgb(0 0 0 / 85%);
+}
+
+.run,
+.splits,
+.active,
+.totals,
+.status {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.seg { border-color: rgb(255 255 255 / 18%); }

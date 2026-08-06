@@ -59,13 +59,13 @@ public sealed record OverlayState(
             tracker.Phase.ToString(),
             route.Name,
             profile.Name,
-            new DisplayView(profile.ShowSplitTimes, profile.ShowSegmentBreakdown),
+            new DisplayView(profile.ShowSplitTimes, profile.ShowSegmentBreakdown, profile.ShowDeaths),
             tracker.RunIgtMs,
             tracker.TotalHits,
             tracker.TotalDeaths,
             new PrimaryView(profile.PrimaryMetric.ToString(), tracker.PrimaryValue, bestPrimary),
             new BestsView(bests.BestRunIgtMs, bests.BestTotalHits, bests.BestTotalDeaths),
-            new PlayerView(snapshot.Hp, snapshot.MaxHp, snapshot.PlayerLoaded, snapshot.IsLoading),
+            new PlayerView(snapshot.PlayerLoaded, snapshot.IsLoading),
             snapshot.BossFightActive,
             tracker.ActiveIndex,
             splits);
@@ -77,7 +77,7 @@ public sealed record OverlayState(
 /// rather than hard-coded in the page, so adding a profile does not mean editing
 /// the overlay's rendering logic.
 /// </summary>
-public sealed record DisplayView(bool ShowSplitTimes, bool ShowSegmentBreakdown);
+public sealed record DisplayView(bool ShowSplitTimes, bool ShowSegmentBreakdown, bool ShowDeaths);
 
 /// <summary>The metric this run is ranked by, alongside the best ever achieved.</summary>
 public sealed record PrimaryView(string Metric, int Value, int? Best);
@@ -85,7 +85,13 @@ public sealed record PrimaryView(string Metric, int Value, int? Best);
 /// <summary>Whole-run bests. Null where the route has never been completed.</summary>
 public sealed record BestsView(int? RunIgtMs, int? TotalHits, int? TotalDeaths);
 
-public sealed record PlayerView(int Hp, int MaxHp, bool Loaded, bool Loading);
+/// <summary>
+/// Only what the overlay needs to describe the game's state. Health is
+/// deliberately absent: the game's own UI already shows it, so duplicating it
+/// costs overlay space and viewer attention for nothing. HP is still read and
+/// is what hits and deaths are derived from — it just never reaches the screen.
+/// </summary>
+public sealed record PlayerView(bool Loaded, bool Loading);
 
 public sealed record SegmentView(int IgtMs, int Hits, int Deaths)
 {

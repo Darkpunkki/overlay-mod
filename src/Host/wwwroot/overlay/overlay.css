@@ -1,34 +1,45 @@
 /* OverlayMod overlay styling.
-   Milestone 3: readable and driven by real data. Milestone 4 does the visual
-   design pass and adds themes. Everything colour-ish is a custom property so a
-   theme file can override it without touching this sheet. */
+
+   Sizes are in rem and the root font size is scaled by --om-scale, so
+   ?scale=1.5 enlarges the whole overlay proportionally without OBS having to
+   stretch and blur a bitmap.
+
+   Everything visual is a custom property, so a theme file in themes/ can
+   restyle the overlay by overriding variables alone. */
 
 :root {
+  --om-scale: 1;
+
   --om-font: "Segoe UI", system-ui, sans-serif;
   --om-font-numeric: "Consolas", ui-monospace, monospace;
 
-  --om-text: #f2f2f2;
-  --om-text-dim: #a8a8a8;
-  --om-plate: rgb(12 12 14 / 72%);
-  --om-plate-edge: rgb(255 255 255 / 8%);
+  --om-text: #f4f4f5;
+  --om-text-dim: #9a9aa2;
+  --om-text-faint: #6a6a72;
 
-  --om-accent: #d8b25a;      /* active split */
-  --om-boss: #d8685a;        /* boss segment */
-  --om-approach: #5a9dd8;    /* approach segment */
-  --om-done: #6fbf73;
-  --om-bad: #d8685a;
+  --om-plate: rgb(10 10 12 / 74%);
+  --om-plate-edge: rgb(255 255 255 / 9%);
+  --om-shadow: 0 1px 3px rgb(0 0 0 / 90%);
+
+  --om-accent: #e0b65c;      /* the active split */
+  --om-boss: #d8685a;
+  --om-approach: #5a9dd8;
 
   /* Comparison against personal bests. Lower is better for every metric. */
   --om-ahead: #6fbf73;
   --om-behind: #d8685a;
-  --om-tied: #d8d8d8;
+  --om-tied: #d0d0d4;
 
-  --om-gap: 8px;
-  --om-radius: 4px;
+  --om-gap: 0.5rem;
+  --om-radius: 0.25rem;
+}
+
+html {
+  font-size: calc(16px * var(--om-scale));
 }
 
 /* Transparent so OBS composites this straight over gameplay. Individual
-   elements carry their own plate for legibility against bright scenes. */
+   blocks carry their own plate for legibility against bright scenes. */
 html, body {
   margin: 0;
   padding: 0;
@@ -43,9 +54,8 @@ html, body {
   flex-direction: column;
   gap: var(--om-gap);
   padding: var(--om-gap);
-  min-width: 260px;
-  /* Text sits over arbitrary game art; a shadow keeps it readable everywhere. */
-  text-shadow: 0 1px 3px rgb(0 0 0 / 90%);
+  min-width: 17rem;
+  text-shadow: var(--om-shadow);
 }
 
 .run,
@@ -56,25 +66,29 @@ html, body {
   background: var(--om-plate);
   border: 1px solid var(--om-plate-edge);
   border-radius: var(--om-radius);
-  padding: 6px 10px;
+  padding: 0.4rem 0.65rem;
 }
 
 /* --- run header --- */
 
 .run__timer {
   font-family: var(--om-font-numeric);
-  font-size: 34px;
+  font-size: 2.25rem;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
 }
 
 .run__meta {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  font-size: 12px;
+  gap: 0.75rem;
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
   color: var(--om-text-dim);
 }
+
+.run__profile { color: var(--om-accent); }
 
 /* --- split list --- */
 
@@ -83,52 +97,65 @@ html, body {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
-/* name | hits | pb, with an optional time column for time-based profiles.
-   Fixed column widths keep the numbers aligned as values change. */
+/* name | hits | pb, plus an optional time column for time-based profiles.
+   Fixed column widths keep numbers aligned as values change. */
 .split {
   display: grid;
-  grid-template-columns: 1fr 2.5ch 5ch;
-  gap: 10px;
+  grid-template-columns: 1fr 2.5ch 4.5ch;
+  gap: 0.625rem;
   align-items: baseline;
-  padding: 3px 0;
-  font-size: 14px;
+  padding: 0.15rem 0 0.15rem 0.4rem;
+  border-left: 2px solid transparent;
+  font-size: 0.875rem;
 }
 
-.split--timed { grid-template-columns: 1fr 2.5ch 5ch 9ch; }
+.split--timed { grid-template-columns: 1fr 2.5ch 4.5ch 8.5ch; }
 
-.split__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .split__hits,
 .split__pb,
 .split__time {
   font-family: var(--om-font-numeric);
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: 0.8125rem;
   text-align: right;
 }
 
-.split__hits { color: var(--om-text); }
 .split__pb,
-.split__time { color: var(--om-text-dim); }
+.split__time { color: var(--om-text-faint); }
 
-/* Current value against this split's own best. */
+/* The live value against this split's own best. */
 .split__hits.is-ahead { color: var(--om-ahead); }
 .split__hits.is-behind { color: var(--om-behind); }
 .split__hits.is-tied { color: var(--om-tied); }
 
-.split.is-active { color: var(--om-accent); font-weight: 600; }
-.split.is-pending { color: var(--om-text-dim); }
-.split.is-pending .split__hits { color: var(--om-text-dim); }
+.split.is-active {
+  border-left-color: var(--om-accent);
+  color: var(--om-accent);
+  font-weight: 600;
+}
+
+.split.is-pending { color: var(--om-text-faint); }
+.split.is-pending .split__hits { color: var(--om-text-faint); }
 
 /* --- active split detail: the approach-vs-boss breakdown --- */
 
+.active[hidden] { display: none; }
+
 .active__name {
-  font-size: 13px;
+  font-size: 0.7rem;
   color: var(--om-text-dim);
-  margin-bottom: 4px;
+  margin-bottom: 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .active__segments { display: flex; gap: var(--om-gap); }
@@ -138,16 +165,21 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4px 8px;
+  padding: 0.25rem 0.5rem;
   border-radius: var(--om-radius);
   border: 1px solid var(--om-plate-edge);
 }
 
-.seg__label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--om-text-dim); }
+.seg__label {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--om-text-dim);
+}
 
-.seg__hits {
+.seg__value {
   font-family: var(--om-font-numeric);
-  font-size: 22px;
+  font-size: 1.375rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -160,18 +192,38 @@ html, body {
 
 /* --- totals --- */
 
-.totals { display: flex; gap: 16px; align-items: baseline; }
-.total { display: flex; gap: 6px; align-items: baseline; }
+.totals { display: flex; gap: 1rem; align-items: baseline; }
+.total { display: flex; gap: 0.4rem; align-items: baseline; }
 .total[hidden] { display: none; }
-.total__label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--om-text-dim); }
-.total__value { font-family: var(--om-font-numeric); font-size: 16px; font-variant-numeric: tabular-nums; }
-.total__pb { font-family: var(--om-font-numeric); font-size: 12px; color: var(--om-text-dim); }
+
+.total__label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--om-text-dim);
+}
+
+.total__value {
+  font-family: var(--om-font-numeric);
+  font-size: 1.125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.total__pb {
+  font-family: var(--om-font-numeric);
+  font-size: 0.75rem;
+  color: var(--om-text-faint);
+}
+
 .total--primary .total__value.is-ahead { color: var(--om-ahead); }
 .total--primary .total__value.is-behind { color: var(--om-behind); }
 .total--primary .total__value.is-tied { color: var(--om-tied); }
-.total--hp .total__value.is-low { color: var(--om-bad); }
 
-/* --- connection status: quiet when healthy, never a wall of red in a recording --- */
+/* --- status: quiet when healthy, never a wall of red in a recording --- */
 
-.status { font-size: 11px; color: var(--om-text-dim); }
-.overlay:not(.is-disconnected) .status { display: none; }
+.status {
+  font-size: 0.6875rem;
+  color: var(--om-text-dim);
+}
+
+.overlay.is-healthy .status { display: none; }

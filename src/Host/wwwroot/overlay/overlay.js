@@ -1,11 +1,15 @@
 // Subscribes to the host's state stream and renders it.
 //
 // EventSource reconnects on its own, so a host restart recovers without
-// touching OBS. We only track whether data is currently arriving, so the
-// overlay can say "disconnected" rather than silently freezing on stale numbers.
+// touching OBS. We also watch for the stream going quiet, since a host that
+// hangs without closing the socket would leave stale numbers on screen.
 //
 // What is shown is driven by state.display, which comes from the challenge
 // profile. Adding a profile should not mean editing this file.
+//
+// Query parameters:
+//   ?theme=<name>   load themes/<name>.css over the defaults
+//   ?scale=<n>      scale the whole overlay (0.5 - 4)
 
 (() => {
   "use strict";
@@ -27,7 +31,6 @@
     primaryPb: el("primaryPb"),
     deathsTotal: el("deathsTotal"),
     totalDeaths: el("totalDeaths"),
-    hp: el("hp"),
     status: el("status"),
   };
 
@@ -39,7 +42,32 @@
   // at 30Hz, so this is a very generous margin.
   const STALE_MS = 2000;
 
+  const EM_DASH = "–";
+
   let lastMessageAt = 0;
+
+  // --- options ---
+
+  function applyOptions() {
+    const params = new URLSearchParams(window.location.search);
+
+    const scale = Number.parseFloat(params.get("scale"));
+    if (Number.isFinite(scale) && scale > 0) {
+      document.documentElement.style.setProperty("--om-scale", Math.min(Math.max(scale, 0.5), 4));
+    }
+
+    // Only ever build a same-origin path from a restricted character set, so a
+    // crafted URL cannot pull in a stylesheet from somewhere else.
+    const theme = params.get("theme");
+    if (theme && /^[a-z0-9-]{1,32}$/.test(theme)) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = `themes/${theme}.css`;
+      document.head.append(link);
+    }
+  }
+
+  // --- formatting ---
 
   function formatTime(ms) {
     if (!Number.isFinite(ms) || ms <= 0) return "0:00.000";
@@ -54,14 +82,17 @@
       : `${mins}:${pad(secs, 2)}.${pad(millis, 3)}`;
   }
 
+  const has = (v) => v !== null && v !== undefined;
+
   // Lower is better for every metric we track: hits, deaths and time alike.
-  // "ahead" means beating the best, "behind" means worse than it.
   function comparisonClass(value, best) {
-    if (best === null || best === undefined) return "";
+    if (!has(best)) return "";
     if (value < best) return "is-ahead";
     if (value > best) return "is-behind";
     return "is-tied";
   }
+
+  // --- rendering ---
 
   // Which slice of the split list to show, clamped to the ends so the list
   // stays a constant height instead of shrinking at the start and finish.
@@ -93,9 +124,7 @@
       const name = document.createElement("span");
       name.className = "split__name";
       name.textContent = s.name;
-      li.append(name);
 
-      // Current hits, coloured against this split's own best.
       const hits = document.createElement("span");
       hits.className = "split__hits";
       if (started) {
@@ -103,20 +132,20 @@
         const cls = comparisonClass(s.hits, s.pbHits);
         if (cls) hits.classList.add(cls);
       } else {
-        hits.textContent = "–";
+        hits.textContent = EM_DASH;
       }
-      li.append(hits);
 
       // The best this split has ever been, so progress is legible at a glance.
       const pb = document.createElement("span");
       pb.className = "split__pb";
-      pb.textContent = s.pbHits === null || s.pbHits === undefined ? "pb –" : `pb ${s.pbHits}`;
-      li.append(pb);
+      pb.textContent = has(s.pbHits) ? s.pbHits : EM_DASH;
+
+      li.append(name, hits, pb);
 
       if (showTimes) {
         const time = document.createElement("span");
         time.className = "split__time";
-        time.textContent = started ? formatTime(s.igtMs) : "–";
+        time.textContent = started ? formatTime(s.igtMs) : EM_DASH;
         li.append(time);
       }
 
@@ -141,50 +170,53 @@
   function renderTotals(state) {
     const primary = state.primary;
     const isTime = primary.metric === "Time";
+    const format = (v) => (isTime ? formatTime(v) : v);
 
     dom.primaryLabel.textContent = primary.metric;
-    dom.primaryValue.textContent = isTime ? formatTime(primary.value) : primary.value;
+    dom.primaryValue.textContent = format(primary.value);
     dom.primaryValue.className = "total__value";
     const cls = comparisonClass(primary.value, primary.best);
     if (cls) dom.primaryValue.classList.add(cls);
 
-    dom.primaryPb.textContent =
-      primary.best === null || primary.best === undefined
-        ? "pb –"
-        : `pb ${isTime ? formatTime(primary.best) : primary.best}`;
+    dom.primaryPb.textContent = has(primary.best) ? `pb ${format(primary.best)}` : `pb ${EM_DASH}`;
 
-    // Deaths are already the primary metric for a Deathless run; showing the
-    // same number twice would just be noise.
-    dom.deathsTotal.hidden = primary.metric === "Deaths";
+    dom.deathsTotal.hidden = !state.display.showDeaths;
     dom.totalDeaths.textContent = state.totalDeaths;
+  }
 
-    const p = state.player;
-    if (state.attached && p.loaded) {
-      dom.hp.textContent = `${p.hp}/${p.maxHp}`;
-      dom.hp.classList.toggle("is-low", p.maxHp > 0 && p.hp / p.maxHp < 0.3);
-    } else {
-      dom.hp.textContent = state.attached ? "–" : "no game";
-      dom.hp.classList.remove("is-low");
+  function renderStatus(state) {
+    // Healthy means: receiving data, and the game is actually there. Anything
+    // else gets one quiet line rather than a banner in the middle of a take.
+    if (!state.attached) {
+      dom.overlay.classList.remove("is-healthy");
+      dom.status.textContent = "waiting for game…";
+      return;
     }
+    dom.overlay.classList.add("is-healthy");
   }
 
   function render(state) {
-    dom.overlay.classList.remove("is-disconnected");
     dom.overlay.classList.toggle("is-boss-active", !!state.bossFightActive);
 
     dom.runTimer.textContent = formatTime(state.runIgtMs);
-    dom.routeName.textContent = state.routeName || "–";
+    dom.routeName.textContent = state.routeName || EM_DASH;
     dom.profileName.textContent = state.profileName || "";
 
     renderSplits(state);
     renderActiveSegments(state);
     renderTotals(state);
+    renderStatus(state);
   }
 
   function markDisconnected(message) {
-    dom.overlay.classList.add("is-disconnected");
+    dom.overlay.classList.remove("is-healthy");
     dom.status.textContent = message;
   }
+
+  // --- stream ---
+
+  applyOptions();
+  markDisconnected("connecting…");
 
   const stream = new EventSource("/events");
 
@@ -199,11 +231,7 @@
 
   stream.onerror = () => markDisconnected("reconnecting…");
 
-  // EventSource fires onerror when the connection drops, but a host that hangs
-  // without closing the socket would leave the overlay showing stale numbers.
   setInterval(() => {
     if (lastMessageAt && Date.now() - lastMessageAt > STALE_MS) markDisconnected("no data");
   }, 500);
-
-  markDisconnected("connecting…");
 })();

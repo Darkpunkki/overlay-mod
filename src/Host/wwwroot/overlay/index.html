@@ -7,7 +7,8 @@
   <link rel="stylesheet" href="overlay.css">
 </head>
 <body>
-  <div id="overlay" class="overlay is-disconnected">
+  <!-- Starts without is-healthy, so the status line shows until data arrives. -->
+  <div id="overlay" class="overlay">
     <header class="run">
       <div class="run__timer" id="runTimer">0:00.000</div>
       <div class="run__meta">
@@ -25,11 +26,11 @@
       <div class="active__segments">
         <div class="seg seg--approach">
           <span class="seg__label">Approach</span>
-          <span class="seg__hits" id="approachHits">0</span>
+          <span class="seg__value" id="approachHits">0</span>
         </div>
         <div class="seg seg--boss">
           <span class="seg__label">Boss</span>
-          <span class="seg__hits" id="bossHits">0</span>
+          <span class="seg__value" id="bossHits">0</span>
         </div>
       </div>
     </section>
@@ -40,13 +41,11 @@
         <span class="total__value" id="primaryValue">0</span>
         <span class="total__pb" id="primaryPb"></span>
       </div>
-      <div class="total" id="deathsTotal">
+      <!-- Deaths are shown only for profiles that treat them as a statistic.
+           In a No-Hit run a death is a failed run, not a number to watch. -->
+      <div class="total total--deaths" id="deathsTotal" hidden>
         <span class="total__label">Deaths</span>
         <span class="total__value" id="totalDeaths">0</span>
-      </div>
-      <div class="total total--hp">
-        <span class="total__label">HP</span>
-        <span class="total__value" id="hp">&mdash;</span>
       </div>
     </footer>
 

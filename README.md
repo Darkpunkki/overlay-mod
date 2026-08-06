@@ -10,9 +10,11 @@ decides what each split shows. For a No-Hit run, the active boss split shows
 hits taken in the approach, hits taken from the boss, and the personal best for
 that split — alongside a whole-run PB for the best total attempt.
 
-> Status: **early development.** Milestones 1–2 are done: the memory-reading
-> foundation (verified against the live game) and the run-tracking state machine.
-> Nothing is on screen yet — that's Milestones 3–4. See [the plan](#milestones).
+> Status: **early development.** Milestones 1–4 are built: the memory-reading
+> foundation, the run-tracking state machine, the localhost host and live state
+> stream, and the overlay itself. Auto-splitting works against a scripted
+> replay but has not been verified against the real game. See
+> [the plan](#milestones).
 
 ## ⚠️ Offline / anti-cheat
 
@@ -43,9 +45,34 @@ is not on the critical path.)
 - **Tracking** (`src/Engine/Tracking`) — `RunTracker`, the pure run-state machine:
   IGT-delta timing, hits from HP drops, deaths, split advancement. No memory access,
   so it is fully testable from synthetic snapshots.
+- **Persistence** (`src/Engine/Persistence`) — finished runs and personal bests,
+  plus a checkpoint of the run in progress. JSON for now; SQLite in Milestone 6.
+- **Host** (`src/Host`) — ASP.NET Core. Polls the game, runs the tracker, serves
+  the overlay and streams state over Server-Sent Events on loopback.
 - **Spike** (`src/Spike`) — Milestone 1 console app that streams live values.
-- **Tests** (`tests/Engine.Tests`) — run-tracker logic, simulated snapshots.
-- Localhost server + web overlay land in Milestones 3–4.
+- **Tests** (`tests/Engine.Tests`) — tracker logic, resume behaviour, personal
+  bests, all driven from synthetic snapshots.
+
+## Run the overlay
+
+No game needed — `--fake` replays a scripted run so the overlay can be developed
+and checked on its own:
+
+```powershell
+dotnet run --project src/Host -- --fake
+```
+
+Then open <http://127.0.0.1:8777/overlay/>, or point an OBS **Browser Source**
+at that URL and layer it over your game capture. Drop `--fake` to drive it from
+a live game instead.
+
+| Option | Meaning |
+|---|---|
+| `--fake` | Replay the scripted demo run instead of reading the game |
+| `--port <n>` | Port to listen on (default 8777) |
+| `--data <dir>` | Run history and checkpoints (default `./appdata`) |
+| `?theme=<name>` | URL option: `minimal` or `light` |
+| `?scale=<n>` | URL option: scale the overlay, e.g. `1.5` |
 
 ## Build & run the spike
 
@@ -85,21 +112,25 @@ checklists — see **[docs/PLAN.md](docs/PLAN.md)**.
    Verified against the live game.
 2. **Engine core** ✅ — `GameSnapshot` + `RunTracker` state machine: IGT-delta
    timing, hits, deaths, approach/boss segments, split advancement (+ unit tests).
-3. **Server & live data** — localhost host broadcasting tracker state as JSON
-   over WebSocket/SSE, plus a **fake/replay snapshot source** so the overlay can
-   be built and tested with no game running.
-   *Done when:* `localhost:PORT/overlay` shows live numbers in a browser.
-4. **Overlay UI** — transparent-background page: run timer, split list, active
-   split with approach/boss hits, deaths, PB delta. CSS variables for theming.
+3. **Server & live data** ✅ — localhost host broadcasting tracker state as JSON
+   over Server-Sent Events, plus a **scripted fake source** so the overlay can be
+   built and tested with no game running.
+4. **Overlay UI** — transparent-background page: run timer, split list with
+   personal bests, profile-driven display, themes and scaling. Built and running
+   against the fake source.
    *Done when:* a test clip recorded in OBS (game capture + browser source on
    top) has the overlay in the file. **This is the headline goal.**
 5. **Auto-splitting for real** — verify event-flag reads live, find the boss-HP /
    boss-fight-active offset, DS3 boss & area database, route + profile editor.
-6. **Persistence** — SQLite, personal bests, gold splits, `.lss`/CSV/JSON export.
-7. **Packaging** — tray host, hotkeys, themes, self-contained single-file build.
+6. **Persistence** — SQLite (personal bests already work via JSON),
+   `.lss`/CSV/JSON export.
+7. **Packaging** — tray host, hotkeys, self-contained single-file build.
 
 Milestones 3 and 4 need neither a running game nor the unsolved boss-HP offset,
-so the visible overlay can be finished before auto-splitting is solved.
+so the visible overlay can be finished before auto-splitting is solved. Things
+awaiting a live game are batched in
+[docs/PLAN.md](docs/PLAN.md#pending-live-verification) rather than checked
+piecemeal.
 
 *Optional, any time after 4:* a transparent click-through desktop window hosting
 the same overlay page, for live feedback while practising.
