@@ -1,0 +1,25 @@
+# Build output
+bin/
+obj/
+out/
+publish/
+*.user
+.vs/
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# Runtime / data
+*.db
+*.db-shm
+*.db-wal
+appdata/
+*.log
+
+# OS
+Thumbs.db
+desktop.ini
+
+# Tooling
+dotnet-install.ps1
