@@ -97,6 +97,79 @@ public class JsonRecordStoreTests : IDisposable
         Assert.Equal(0, bests.SplitDeaths("B"));
     }
 
+    // --- per-split bests from unfinished attempts ---
+
+    [Fact]
+    public void ASplitBestIsEarnedWhenTheBossDies_NotWhenTheRunFinishes()
+    {
+        var store = new JsonRecordStore(Path_);
+
+        // An attempt that beat Iudex cleanly and was then abandoned.
+        store.RecordSplit("r", new SplitRecord("Iudex Gundyr", 30_000, 0, 0));
+
+        Assert.Equal(0, store.BestsFor("r").SplitHits("Iudex Gundyr"));
+    }
+
+    [Fact]
+    public void AnAbandonedAttemptDoesNotCreateAWholeRunBest()
+    {
+        var store = new JsonRecordStore(Path_);
+        store.RecordSplit("r", new SplitRecord("Iudex Gundyr", 30_000, 0, 0));
+
+        // Totals from a run that was never finished are not comparable.
+        var bests = store.BestsFor("r");
+        Assert.Null(bests.BestTotalHits);
+        Assert.Null(bests.BestRunIgtMs);
+    }
+
+    [Fact]
+    public void TheBestSplitSurvivesALaterWorseAttempt()
+    {
+        var store = new JsonRecordStore(Path_);
+        store.RecordSplit("r", new SplitRecord("Iudex Gundyr", 30_000, 0, 0));
+        store.RecordSplit("r", new SplitRecord("Iudex Gundyr", 45_000, 4, 1));
+
+        var bests = store.BestsFor("r");
+        Assert.Equal(0, bests.SplitHits("Iudex Gundyr"));
+        Assert.Equal(30_000, bests.SplitIgtMs("Iudex Gundyr"));
+    }
+
+    [Fact]
+    public void SplitBestsSurviveReopeningTheStore()
+    {
+        var store = new JsonRecordStore(Path_);
+        store.RecordSplit("r", new SplitRecord("Iudex Gundyr", 30_000, 1, 0));
+
+        Assert.Equal(1, new JsonRecordStore(Path_).BestsFor("r").SplitHits("Iudex Gundyr"));
+    }
+
+    [Fact]
+    public void ExistingHistoryWithoutStoredSplitBestsIsMigrated()
+    {
+        // A file written before split bests were kept separately.
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path_, """
+            {
+              "runs": [
+                {
+                  "routeName": "r",
+                  "profileName": "No-Hit",
+                  "completedAt": "2026-01-01T00:00:00+00:00",
+                  "runIgtMs": 60000,
+                  "totalHits": 5,
+                  "totalDeaths": 0,
+                  "splits": [ { "name": "A", "igtMs": 60000, "hits": 5, "deaths": 0 } ]
+                }
+              ]
+            }
+            """);
+
+        var bests = new JsonRecordStore(Path_).BestsFor("r");
+
+        Assert.Equal(5, bests.BestTotalHits);
+        Assert.Equal(5, bests.SplitHits("A"));   // rebuilt from the run
+    }
+
     [Fact]
     public void RoutesAreTrackedSeparately()
     {

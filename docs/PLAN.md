@@ -72,6 +72,9 @@ persists, and the host runs happily before the game exists.
       change with the profile.
 - [ ] **No end-of-run state.** A finished run just stops; there is no "run
       complete" treatment and no acknowledgement of a new personal best.
+- [ ] **Abandoned attempts leave no history.** Split bests now survive them, but
+      the attempt itself is not recorded, so there is no way to look back over
+      how attempts have gone — only at the best.
 - [ ] Approach-vs-boss breakdown displays correctly but is **always empty in a
       real game** — nothing sets `BossFightActive`. Blocked on the boss-HP
       offset. *(needs the game)*
@@ -173,6 +176,12 @@ Decisions not yet made. Flagged here rather than silently assumed.
 - **Personal bests are per-split as well as per-run** ("gold splits"), so the
   overlay can show progress against the best each boss has *ever* been rather
   than only against one best run.
+- **A split's best is earned the moment that boss dies**, whether or not the run
+  is ever finished. Most attempts end early, so requiring a completed run would
+  discard nearly every boss result a player produces. **Whole-run bests are the
+  opposite**: they only come from a finished run, because a total from an
+  abandoned attempt is not comparable to one from a completed one. The two are
+  stored separately for that reason — `splitBests` alongside `runs`.
 - **Routes are JSON files in `appdata/routes/`**, seeded on first run and meant
   to be hand-edited. Seeding happens only when the directory has no routes at
   all — per-missing-file seeding would resurrect a route the user deliberately

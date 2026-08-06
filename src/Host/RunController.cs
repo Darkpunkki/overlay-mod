@@ -170,7 +170,9 @@ public sealed class RunController
             if (_tracker.Phase == RunPhase.NotStarted) StartNew(snapshot);
 
             var wasRunning = _tracker.Phase == RunPhase.Running;
+            var indexBefore = _tracker.ActiveIndex;
             _tracker.Update(snapshot, flags);
+            RecordSplitsCompletedSince(indexBefore);
 
             if (wasRunning && _tracker.Phase == RunPhase.Finished) OnRunFinished();
             else Checkpoint();
@@ -213,6 +215,26 @@ public sealed class RunController
         _bests = _records.BestsFor(_route.Name);
         _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
         Checkpoint(force: true);
+    }
+
+    /// <summary>
+    /// File every split that finished on this tick, so a personal best per boss
+    /// is earned the moment that boss dies rather than only if the whole run is
+    /// completed. Most attempts end early; waiting for a finish would discard
+    /// nearly every result a player produces.
+    /// </summary>
+    private void RecordSplitsCompletedSince(int fromIndex)
+    {
+        var to = Math.Min(_tracker.ActiveIndex, _tracker.Splits.Count);
+        if (to <= fromIndex) return;
+
+        for (var i = fromIndex; i < to; i++)
+        {
+            var s = _tracker.Splits[i];
+            _records.RecordSplit(_route.Name, new SplitRecord(s.Name, s.IgtMs, s.Hits, s.Deaths));
+        }
+
+        _bests = _records.BestsFor(_route.Name);
     }
 
     private void OnRunFinished()
@@ -270,7 +292,10 @@ public sealed class RunController
         lock (_gate)
         {
             var wasRunning = _tracker.Phase == RunPhase.Running;
+            var indexBefore = _tracker.ActiveIndex;
             _tracker.Split();
+            RecordSplitsCompletedSince(indexBefore);
+
             if (wasRunning && _tracker.Phase == RunPhase.Finished) OnRunFinished();
             else Checkpoint(force: true);
         }

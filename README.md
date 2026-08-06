@@ -158,6 +158,11 @@ Each split shows whichever metric the challenge is ranked by, next to that
 split's personal best — comparing hits on a time-ranked run would tell you
 nothing.
 
+**Personal bests come in two kinds.** A **split best** is earned the moment that
+boss dies, whether or not you go on to finish — so an abandoned attempt still
+improves your best Iudex. A **whole-run best**, shown next to the run total, only
+comes from a run you actually completed.
+
 | Challenge | Ranked by | Each split shows | Also |
 |---|---|---|---|
 | No-Hit | Total hits | Hits vs. best | — |

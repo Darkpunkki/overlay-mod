@@ -53,6 +53,7 @@ public class RunResumeTests : IDisposable
     {
         public PersonalBests BestsFor(string routeName) => PersonalBests.Empty;
         public void Record(RunRecord run) { }
+        public void RecordSplit(string routeName, SplitRecord split) { }
     }
 
     private sealed class NoFlags : IFlagSource
