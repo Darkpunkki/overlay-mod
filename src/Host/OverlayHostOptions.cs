@@ -21,6 +21,12 @@ public sealed class OverlayHostOptions
 
     public string RunStatePath => Path.Combine(DataDirectory, "run-state.json");
 
+    public string SettingsPath => Path.Combine(DataDirectory, "settings.json");
+
+    public string RoutesDirectory => Path.Combine(DataDirectory, "routes");
+
+    public string ControlUrl => $"http://127.0.0.1:{Port}/control/";
+
     public static OverlayHostOptions Parse(string[] args)
     {
         var port = 8777;

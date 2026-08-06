@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OverlayMod — control</title>
+  <link rel="stylesheet" href="control.css">
+</head>
+<body>
+  <main class="page">
+    <header class="head">
+      <h1>OverlayMod</h1>
+      <p class="head__sub">Pick what you're running. The overlay updates immediately.</p>
+    </header>
+
+    <section class="card">
+      <h2>Challenge</h2>
+      <p class="hint">Decides what the overlay shows and what your runs are ranked by.</p>
+      <div class="choices" id="challenges"></div>
+    </section>
+
+    <section class="card">
+      <h2>Route</h2>
+      <p class="hint">
+        Route files live in <code id="routesPath">appdata/routes</code> and are plain JSON —
+        edit them freely, then reload.
+      </p>
+      <div class="choices choices--stack" id="routes"></div>
+      <button class="btn btn--quiet" id="reload" type="button">Reload from disk</button>
+    </section>
+
+    <section class="card">
+      <h2>Run</h2>
+      <div class="row">
+        <button class="btn" id="start" type="button">Start</button>
+        <button class="btn" id="split" type="button">Split</button>
+        <button class="btn btn--quiet" id="reset" type="button">Reset</button>
+      </div>
+      <p class="hint">
+        Runs start on their own when you load into the world. These are for when you
+        need to override that, and for splits with no known boss flag.
+      </p>
+    </section>
+
+    <section class="card status" id="live">
+      <h2>Now</h2>
+      <dl class="facts">
+        <dt>Game</dt><dd id="factGame">—</dd>
+        <dt>Phase</dt><dd id="factPhase">—</dd>
+        <dt>Timer</dt><dd id="factTimer">—</dd>
+        <dt>Split</dt><dd id="factSplit">—</dd>
+      </dl>
+      <p class="hint">Overlay URL for OBS: <code id="overlayUrl">/overlay/</code></p>
+    </section>
+
+    <p class="toast" id="toast" hidden></p>
+  </main>
+
+  <script src="control.js"></script>
+</body>
+</html>

@@ -18,9 +18,13 @@ public sealed class RunController
     private readonly RunTracker _tracker = new();
     private readonly IRecordStore _records;
     private readonly RunStateStore _parked;
+    private readonly RouteStore _routes;
+    private readonly SettingsStore _settings;
     private readonly ILogger<RunController> _log;
 
-    private Route _route = DemoRoute.Create();
+    private RouteFile _routeFile;
+    private ChallengeProfile _profile;
+    private Route _route;
     private PersonalBests _bests;
 
     /// <summary>Set whenever contact with the game is lost, forcing a resume-or-restart decision.</summary>
@@ -37,11 +41,25 @@ public sealed class RunController
     /// </summary>
     private (int Index, int Hits, int Deaths, RunPhase Phase) _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
 
-    public RunController(IRecordStore records, RunStateStore parked, ILogger<RunController> log)
+    public RunController(
+        IRecordStore records,
+        RunStateStore parked,
+        RouteStore routes,
+        SettingsStore settings,
+        ILogger<RunController> log)
     {
         _records = records;
         _parked = parked;
+        _routes = routes;
+        _settings = settings;
         _log = log;
+
+        // Restore the last route and challenge chosen. If that route has since
+        // been renamed or deleted, fall back rather than starting with nothing.
+        var saved = _settings.Load();
+        _routeFile = (saved is null ? null : _routes.Find(saved.RouteName)) ?? _routes.Default;
+        _profile = ChallengeProfile.For(saved?.Challenge ?? _routeFile.DefaultChallenge);
+        _route = _routeFile.ToRoute(_profile);
         _bests = _records.BestsFor(_route.Name);
 
         // A run left unfinished by a previous session is picked up here; whether
@@ -53,6 +71,43 @@ public sealed class RunController
     public Route Route
     {
         get { lock (_gate) return _route; }
+    }
+
+    /// <summary>What is currently selected, for the control page to display.</summary>
+    public (RouteFile Route, ChallengeProfile Profile) Current
+    {
+        get { lock (_gate) return (_routeFile, _profile); }
+    }
+
+    /// <summary>
+    /// Choose what to run. Changing either the route or the challenge abandons any
+    /// run in progress: the splits or the thing being measured have changed, so
+    /// carrying the old numbers forward would be meaningless.
+    /// </summary>
+    public bool Select(string routeName, ChallengeType challenge)
+    {
+        lock (_gate)
+        {
+            var file = _routes.Find(routeName);
+            if (file is null) return false;
+
+            var unchanged = ReferenceEquals(file, _routeFile) && _profile.Type == challenge;
+            if (unchanged) return true;
+
+            _routeFile = file;
+            _profile = ChallengeProfile.For(challenge);
+            _route = _routeFile.ToRoute(_profile);
+            _bests = _records.BestsFor(_route.Name);
+
+            _tracker.Reset();
+            _parked.Clear();
+            _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
+            _awaitingResumeDecision = true;
+
+            _settings.Save(new Selection(_routeFile.Name, challenge));
+            _log.LogInformation("Selected route {Route} as {Challenge}.", _routeFile.Name, _profile.Name);
+            return true;
+        }
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using OverlayMod.Engine.GameState;
 using OverlayMod.Engine.Persistence;
+using OverlayMod.Engine.Tracking;
 using OverlayMod.Host;
 
 // The overlay host: polls the game (or a scripted fake), runs the tracker, and
@@ -20,6 +21,8 @@ builder.Services.AddSingleton<ISnapshotSource>(_ =>
     options.UseFake ? new FakeSnapshotSource() : new Ds3Reader());
 builder.Services.AddSingleton<IRecordStore>(_ => new JsonRecordStore(options.RecordsPath));
 builder.Services.AddSingleton(_ => new RunStateStore(options.RunStatePath));
+builder.Services.AddSingleton(_ => new RouteStore(options.RoutesDirectory));
+builder.Services.AddSingleton(_ => new SettingsStore(options.SettingsPath));
 builder.Services.AddSingleton<RunController>();
 builder.Services.AddSingleton<StateBroadcaster>();
 builder.Services.AddHostedService<EngineLoop>();
@@ -71,6 +74,57 @@ app.MapGet("/events", async (HttpContext ctx, StateBroadcaster bus, Cancellation
     }
 });
 
+// What can be run, and what is currently selected. The control page uses these;
+// they are also the answer to "how do I pick a challenge" before there is a
+// route editor.
+app.MapGet("/api/routes", (RouteStore routes, RunController rc) =>
+{
+    var (currentRoute, currentProfile) = rc.Current;
+    return Results.Ok(new
+    {
+        selected = new { route = currentRoute.Name, challenge = currentProfile.Type.ToString() },
+        challenges = ChallengeProfile.All.Select(p => new { type = p.Type.ToString(), name = p.Name }),
+        routes = routes.All.Select(r => new
+        {
+            name = r.Name,
+            defaultChallenge = r.DefaultChallenge.ToString(),
+            splits = r.Splits.Count,
+            autoSplits = r.AutoSplitCount,
+            flagsVerified = r.FlagsVerified,
+        }),
+    });
+});
+
+app.MapPost("/api/routes/select", (SelectRequest body, RunController rc) =>
+{
+    if (!Enum.TryParse<ChallengeType>(body.Challenge, ignoreCase: true, out var challenge))
+        return Results.BadRequest(new { error = $"Unknown challenge '{body.Challenge}'." });
+
+    return rc.Select(body.Route, challenge)
+        ? Results.Ok(new { selected = true })
+        : Results.NotFound(new { error = $"No route named '{body.Route}'." });
+});
+
+// Re-read the routes directory, so hand-edited route files can be picked up
+// without restarting the host.
+app.MapPost("/api/routes/reload", (RouteStore routes) =>
+{
+    routes.Reload();
+    return Results.Ok(new { routes = routes.All.Count });
+});
+
+// Read arbitrary event flags. This exists for the live verification session:
+// boss-defeat flag ids are mostly unconfirmed, and watching candidates flip
+// while killing a boss is how they get confirmed.
+app.MapGet("/api/flags", (string ids, ISnapshotSource source) =>
+{
+    var result = new Dictionary<string, bool>();
+    foreach (var part in ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        if (uint.TryParse(part, out var id)) result[part] = source.Flags.IsEventFlagSet(id);
+
+    return Results.Ok(new { attached = source.Attached, flags = result });
+});
+
 // Manual run control, mirroring LiveSplit's hotkeys. Wired to real hotkeys in
 // Milestone 7; for now these make the tracker testable from a browser or curl.
 var run = app.MapGroup("/api/run");
@@ -83,17 +137,23 @@ run.MapPost("/split", (RunController rc) => { rc.Split(); return Results.Ok(new 
 run.MapPost("/reset", (RunController rc) => { rc.Reset(); return Results.Ok(new { reset = true }); });
 
 var source = app.Services.GetRequiredService<ISnapshotSource>();
+var selected = app.Services.GetRequiredService<RunController>().Current;
 Console.WriteLine($"""
 
     OverlayMod host
       source   : {source.Description}
+      running  : {selected.Route.Name} as {selected.Profile.Name}
+                 ({selected.Route.AutoSplitCount}/{selected.Route.Splits.Count} splits auto-advance)
       overlay  : {options.OverlayUrl}
-      stream   : http://127.0.0.1:{options.Port}/events
-      state    : http://127.0.0.1:{options.Port}/api/state
+      control  : {options.ControlUrl}
       data     : {Path.GetFullPath(options.DataDirectory)}
 
+    Open the control URL to pick a route and challenge.
     Point an OBS Browser Source at the overlay URL. Ctrl+C to stop.
 
     """);
 
 app.Run();
+
+/// <summary>Body of a route-selection request.</summary>
+internal sealed record SelectRequest(string Route, string Challenge);

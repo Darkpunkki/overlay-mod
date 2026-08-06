@@ -54,12 +54,14 @@ work that does not touch it.
 | 1 | **Event-flag reads** | Load a save past Iudex Gundyr; the spike's `IudexGundyr` column should read `DEAD` | All auto-splitting depends on it |
 | 2 | **IGT persists across a restart** | Note IGT, quit to desktop, relaunch, load in; IGT should resume at or above the noted value | The entire resume-a-run feature rests on this |
 | 3 | **IGT at the main menu** | Watch the spike's IGT while sitting at the menu | The tracker assumes menu IGT is meaningless and ignores it; if it reads as a huge or negative value the resume comparison needs a guard |
-| 4 | **Boss-defeat flag ids** | Kill Vordt and Greatwood, watch their flags flip | Only Iudex's `14000800` came from a known-good source; the others were inferred from the numbering pattern |
+| 4 | **Boss-defeat flag ids** | `GET /api/flags?ids=13000800,13100800,…` while killing a boss; whichever flips is that boss's id | Only Iudex (`14000800`) and the Nameless King (`13200850`) are known. Every other split in the All Bosses route is manual until this is done |
 | 5 | **Player-loaded timing** | Watch when `player` flips true relative to regaining control | Decides whether runs start slightly early, during the fade-in |
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
 
-Checks 1–5 are observation only and need nothing but the spike running. Check 6
-is a research task, not a verification.
+Checks 1–3 and 5 are observation only and need nothing but the spike running.
+Check 4 is what `GET /api/flags?ids=…` exists for — it reads arbitrary event
+flags from the live game, so candidate ids can be watched while a boss dies.
+Check 6 is a research task, not a verification.
 
 ## Open questions
 
@@ -67,11 +69,10 @@ Decisions not yet made. Flagged here rather than silently assumed.
 
 - **What resets a run?** Death is not a reset in a Deathless profile — it is a
   run-ending failure. The tracker has no "failed" phase yet. *Needed by M5.*
-- **Where do routes live?** JSON files on disk under `appdata/routes/` is the
-  assumption, editable by hand before the editor exists. *Needed by M5.*
 - **Multi-monitor / resolution.** Overlay is authored at a fixed design size and
   scaled by OBS, versus authored responsively. Fixed is simpler and normal for
-  stream overlays. *Needed by M4.*
+  stream overlays. *Partly settled:* `?scale=` exists; whether that is enough in
+  practice is a question for the first real recording.
 
 ## Decisions already made
 
@@ -104,6 +105,21 @@ Decisions not yet made. Flagged here rather than silently assumed.
 - **Personal bests are per-split as well as per-run** ("gold splits"), so the
   overlay can show progress against the best each boss has *ever* been rather
   than only against one best run.
+- **Routes are JSON files in `appdata/routes/`**, seeded on first run and meant
+  to be hand-edited. Seeding happens only when the directory has no routes at
+  all — per-missing-file seeding would resurrect a route the user deliberately
+  deleted, leaving no way to be rid of it.
+- **Route and challenge are chosen separately.** A route is just an ordered list
+  of things to beat; the same boss list can be run as No-Hit or as Any%. The
+  route names a default challenge, but the selection overrides it and is
+  remembered in `appdata/settings.json`.
+- **Changing either abandons the run in progress.** The splits, or the thing
+  being measured, have changed — carrying the old numbers forward would be
+  meaningless.
+- **Unknown boss flag ids are left null, not guessed.** A wrong id fails
+  silently: it never fires, or fires at the wrong moment. Null means "advance
+  this split manually", which is honest and works. Only Iudex Gundyr
+  (`14000800`) and the Nameless King (`13200850`) come from a known-good source.
 
 ---
 
@@ -291,18 +307,33 @@ That recording is the project's original goal met.
 
 ## Milestone 5 — Auto-splitting for real
 
-Sketch only; expand when it becomes next.
+Partly done. The parts that needed no game are built:
 
-- Verify event-flag reads live (load a save past Iudex, confirm `DEAD`). This is
-  a two-minute check that has been outstanding for a while and gates everything
-  else here.
-- Find boss HP / boss-fight-active. The known-good lead: the module-bag pattern
-  that worked for player HP (`PlayerIns + ModuleBagOffset → +0x18 → +0xD8`)
-  should apply to boss character instances too. Populate
-  `GameSnapshot.BossFightActive` and the approach/boss split comes alive.
-- DS3 boss and area database: names, defeat flag ids, ordering.
-- Route files (JSON) plus the challenge profiles that decide what splits show.
-- Resolve the "what starts/resets a run" question above.
+- [x] **Route files** (`appdata/routes/*.json`), seeded on first run, hot
+      reloadable, hand-editable.
+- [x] **Challenge profiles** driving what the overlay shows, selectable
+      independently of the route and remembered across restarts.
+- [x] **Control page** at `/control/` for choosing both, plus manual
+      start/split/reset. This is the answer to "where do I decide what I'm
+      running".
+- [x] **Boss list** for the main game — names and ordering.
+- [x] **Flag probe** (`GET /api/flags?ids=…`) so the unknown flag ids can be
+      identified in one session rather than guessed.
+
+Remaining, all needing the game:
+
+- [ ] Confirm event-flag reads work at all (pending-verification #1).
+- [ ] Identify the boss-defeat flag ids and fill them into the route files
+      (#4). Until then most splits in the All Bosses route are manual.
+- [ ] Find boss HP / boss-fight-active (#6). The known-good lead: the module-bag
+      pattern that worked for player HP (`PlayerIns + ModuleBagOffset → +0x18 →
+      +0xD8`) should apply to boss character instances too. Populating
+      `GameSnapshot.BossFightActive` brings approach-vs-boss attribution alive.
+- [ ] Route editor in the control page, so splits can be reordered without
+      editing JSON. Not blocked by the game, just not urgent while the files are
+      simple.
+- [ ] A "failed run" phase, for a death under Deathless or a hit under No-Hit —
+      see the open question above.
 
 ## Milestone 6 — Persistence
 

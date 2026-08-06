@@ -55,6 +55,8 @@ public class RunResumeTests : IDisposable
     private RunController NewController() => new(
         new NoRecords(),
         new RunStateStore(Path.Combine(_dir, "run-state.json")),
+        new RouteStore(Path.Combine(_dir, "routes")),
+        new SettingsStore(Path.Combine(_dir, "settings.json")),
         NullLogger<RunController>.Instance);
 
     private static int HitsOf(RunController c, GameSnapshot s) => c.Project(s).TotalHits;

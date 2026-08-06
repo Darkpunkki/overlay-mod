@@ -53,26 +53,78 @@ is not on the critical path.)
 - **Tests** (`tests/Engine.Tests`) — tracker logic, resume behaviour, personal
   bests, all driven from synthetic snapshots.
 
-## Run the overlay
+## Where the overlay actually appears
 
-No game needed — `--fake` replays a scripted run so the overlay can be developed
+The engine serves a web page on loopback. That page can be shown in three
+places, and you choose which by where you point something at the URL:
+
+| Where | How | Works today |
+|---|---|---|
+| **In your recording / stream** | OBS **Browser Source** layered over your game capture | ✅ the intended use |
+| **In a browser window** | Just open the URL on a second monitor | ✅ |
+| **On top of the game while you play** | Would need a transparent always-on-top window | ❌ not built — optional extra |
+
+It does **not** draw over the game itself. Nothing is injected into Dark Souls
+III; the overlay is a separate page that OBS composites on top when recording.
+If you want it on your own screen while playing, put it in a browser window on a
+second monitor, or wait for the optional desktop-window mode.
+
+## Playing a tracked run
+
+1. **Launch Dark Souls III offline with EAC disabled.** Non-negotiable — see the
+   warning above. Steam can be running; Steam's offline mode is fine.
+2. **Start the host:**
+   ```powershell
+   dotnet run --project src/Host
+   ```
+   Order does not matter. The host retries attaching once a second, and picks
+   the game up whenever it appears.
+3. **Pick what you're running** at <http://127.0.0.1:8777/control/> — the
+   challenge (No-Hit, Deathless, Any%, All Bosses) and the route. The choice is
+   remembered for next time.
+4. **OBS is only needed if you want it in a recording.** Add a Browser Source
+   pointing at <http://127.0.0.1:8777/overlay/>, size it to your canvas, and put
+   it above your game capture. To just watch it yourself, open that URL in a
+   browser instead.
+5. **Play.** The run starts when you load into the world. Quitting the game
+   pauses the timer; loading back in resumes the same run.
+
+No game to hand? `--fake` replays a scripted run so the overlay can be developed
 and checked on its own:
 
 ```powershell
 dotnet run --project src/Host -- --fake
 ```
 
-Then open <http://127.0.0.1:8777/overlay/>, or point an OBS **Browser Source**
-at that URL and layer it over your game capture. Drop `--fake` to drive it from
-a live game instead.
-
 | Option | Meaning |
 |---|---|
 | `--fake` | Replay the scripted demo run instead of reading the game |
 | `--port <n>` | Port to listen on (default 8777) |
-| `--data <dir>` | Run history and checkpoints (default `./appdata`) |
-| `?theme=<name>` | URL option: `minimal` or `light` |
-| `?scale=<n>` | URL option: scale the overlay, e.g. `1.5` |
+| `--data <dir>` | Routes, history and checkpoints (default `./appdata`) |
+| `?theme=<name>` | Overlay URL option: `minimal` or `light` |
+| `?scale=<n>` | Overlay URL option: scale the overlay, e.g. `1.5` |
+
+## Challenges and routes
+
+The **challenge** decides what the overlay shows and how runs are ranked:
+
+| Challenge | Ranked by | Shows |
+|---|---|---|
+| No-Hit | Total hits | Hits per boss vs. your best. No times, no death count |
+| Deathless | Deaths | Deaths per boss vs. your best |
+| Any% | Time | Per-split times and deaths |
+| All Bosses | Time | Per-split times, deaths, and approach/boss hit breakdown |
+
+Routes are JSON files in `appdata/routes/`, written on first run and meant to be
+edited. Add or reorder splits, then hit **Reload from disk** on the control page.
+A split carries the boss-defeat event flag that auto-advances it; a split with no
+flag has to be advanced manually with the **Split** button.
+
+> ⚠️ **Auto-splitting is mostly unconfirmed.** Only Iudex Gundyr's and the
+> Nameless King's flag ids come from a known-good source. The rest are left empty
+> rather than guessed, because a wrong id fails silently. The control page tells
+> you how many splits in a route can actually auto-advance. Confirming the others
+> against a live game is Milestone 5.
 
 ## Build & run the spike
 
