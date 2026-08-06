@@ -18,6 +18,11 @@
   --om-done: #6fbf73;
   --om-bad: #d8685a;
 
+  /* Comparison against personal bests. Lower is better for every metric. */
+  --om-ahead: #6fbf73;
+  --om-behind: #d8685a;
+  --om-tied: #d8d8d8;
+
   --om-gap: 8px;
   --om-radius: 4px;
 }
@@ -81,30 +86,42 @@ html, body {
   gap: 2px;
 }
 
+/* name | hits | pb, with an optional time column for time-based profiles.
+   Fixed column widths keep the numbers aligned as values change. */
 .split {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr 2.5ch 5ch;
   gap: 10px;
   align-items: baseline;
   padding: 3px 0;
   font-size: 14px;
 }
 
+.split--timed { grid-template-columns: 1fr 2.5ch 5ch 9ch; }
+
 .split__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .split__hits,
+.split__pb,
 .split__time {
   font-family: var(--om-font-numeric);
   font-variant-numeric: tabular-nums;
   font-size: 13px;
-  color: var(--om-text-dim);
+  text-align: right;
 }
 
+.split__hits { color: var(--om-text); }
+.split__pb,
+.split__time { color: var(--om-text-dim); }
+
+/* Current value against this split's own best. */
+.split__hits.is-ahead { color: var(--om-ahead); }
+.split__hits.is-behind { color: var(--om-behind); }
+.split__hits.is-tied { color: var(--om-tied); }
+
 .split.is-active { color: var(--om-accent); font-weight: 600; }
-.split.is-active .split__hits,
-.split.is-active .split__time { color: var(--om-accent); }
-.split.is-done .split__time { color: var(--om-done); }
 .split.is-pending { color: var(--om-text-dim); }
+.split.is-pending .split__hits { color: var(--om-text-dim); }
 
 /* --- active split detail: the approach-vs-boss breakdown --- */
 
@@ -143,10 +160,15 @@ html, body {
 
 /* --- totals --- */
 
-.totals { display: flex; gap: 16px; }
+.totals { display: flex; gap: 16px; align-items: baseline; }
 .total { display: flex; gap: 6px; align-items: baseline; }
+.total[hidden] { display: none; }
 .total__label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--om-text-dim); }
 .total__value { font-family: var(--om-font-numeric); font-size: 16px; font-variant-numeric: tabular-nums; }
+.total__pb { font-family: var(--om-font-numeric); font-size: 12px; color: var(--om-text-dim); }
+.total--primary .total__value.is-ahead { color: var(--om-ahead); }
+.total--primary .total__value.is-behind { color: var(--om-behind); }
+.total--primary .total__value.is-tied { color: var(--om-tied); }
 .total--hp .total__value.is-low { color: var(--om-bad); }
 
 /* --- connection status: quiet when healthy, never a wall of red in a recording --- */

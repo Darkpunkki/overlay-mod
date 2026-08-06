@@ -17,16 +17,33 @@ public enum RunMetric
 }
 
 /// <summary>
-/// A challenge profile decides what a run is judged on and what each split
-/// emphasises. Hits and deaths are always recorded internally (cheap); the
-/// primary metric drives PB ranking and the overlay's active-split boxes.
+/// A challenge profile decides what a run is judged on and what the overlay
+/// shows. Hits, deaths and approach/boss times are always recorded internally —
+/// they are cheap and a later profile may want them — but a profile only
+/// displays what is relevant to it. A No-Hit runner cares about hits per boss
+/// and the total clock, not per-boss times.
 /// </summary>
-public sealed record ChallengeProfile(ChallengeType Type, string Name, RunMetric PrimaryMetric)
+/// <param name="PrimaryMetric">What the run is ranked by, for PB comparison.</param>
+/// <param name="ShowSplitTimes">Show a per-split time column.</param>
+/// <param name="ShowSegmentBreakdown">Show approach and boss hits separately rather than combined.</param>
+public sealed record ChallengeProfile(
+    ChallengeType Type,
+    string Name,
+    RunMetric PrimaryMetric,
+    bool ShowSplitTimes,
+    bool ShowSegmentBreakdown)
 {
-    public static readonly ChallengeProfile NoHit = new(ChallengeType.NoHit, "No-Hit", RunMetric.Hits);
-    public static readonly ChallengeProfile Deathless = new(ChallengeType.Deathless, "Deathless", RunMetric.Deaths);
-    public static readonly ChallengeProfile AnyPercent = new(ChallengeType.AnyPercent, "Any%", RunMetric.Time);
-    public static readonly ChallengeProfile AllBosses = new(ChallengeType.AllBosses, "All Bosses", RunMetric.Time);
+    public static readonly ChallengeProfile NoHit =
+        new(ChallengeType.NoHit, "No-Hit", RunMetric.Hits, ShowSplitTimes: false, ShowSegmentBreakdown: false);
+
+    public static readonly ChallengeProfile Deathless =
+        new(ChallengeType.Deathless, "Deathless", RunMetric.Deaths, ShowSplitTimes: false, ShowSegmentBreakdown: false);
+
+    public static readonly ChallengeProfile AnyPercent =
+        new(ChallengeType.AnyPercent, "Any%", RunMetric.Time, ShowSplitTimes: true, ShowSegmentBreakdown: false);
+
+    public static readonly ChallengeProfile AllBosses =
+        new(ChallengeType.AllBosses, "All Bosses", RunMetric.Time, ShowSplitTimes: true, ShowSegmentBreakdown: true);
 
     public static ChallengeProfile For(ChallengeType type) => type switch
     {

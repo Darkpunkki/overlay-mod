@@ -1,4 +1,5 @@
 using OverlayMod.Engine.GameState;
+using OverlayMod.Engine.Persistence;
 using OverlayMod.Engine.Tracking;
 
 namespace OverlayMod.Host;
@@ -14,16 +15,19 @@ public sealed record OverlayState(
     string Phase,
     string RouteName,
     string ProfileName,
+    DisplayView Display,
     int RunIgtMs,
     int TotalHits,
     int TotalDeaths,
     PrimaryView Primary,
+    BestsView Bests,
     PlayerView Player,
     bool BossFightActive,
     int ActiveIndex,
     IReadOnlyList<SplitView> Splits)
 {
-    public static OverlayState From(RunTracker tracker, Route route, GameSnapshot snapshot)
+    public static OverlayState From(
+        RunTracker tracker, Route route, PersonalBests bests, GameSnapshot snapshot)
     {
         var splits = new List<SplitView>(tracker.Splits.Count);
         foreach (var s in tracker.Splits)
@@ -37,20 +41,30 @@ public sealed record OverlayState(
                 s.Deaths,
                 SegmentView.From(s.Approach),
                 SegmentView.From(s.Boss),
-                // Personal bests arrive with persistence in Milestone 6.
-                PbIgtMs: null,
-                PbHits: null));
+                bests.SplitIgtMs(s.Name),
+                bests.SplitHits(s.Name)));
         }
+
+        var profile = route.Profile;
+        var bestPrimary = profile.PrimaryMetric switch
+        {
+            RunMetric.Hits => bests.BestTotalHits,
+            RunMetric.Deaths => bests.BestTotalDeaths,
+            RunMetric.Time => bests.BestRunIgtMs,
+            _ => null,
+        };
 
         return new OverlayState(
             snapshot.Attached,
             tracker.Phase.ToString(),
             route.Name,
-            route.Profile.Name,
+            profile.Name,
+            new DisplayView(profile.ShowSplitTimes, profile.ShowSegmentBreakdown),
             tracker.RunIgtMs,
             tracker.TotalHits,
             tracker.TotalDeaths,
-            new PrimaryView(route.Profile.PrimaryMetric.ToString(), tracker.PrimaryValue),
+            new PrimaryView(profile.PrimaryMetric.ToString(), tracker.PrimaryValue, bestPrimary),
+            new BestsView(bests.BestRunIgtMs, bests.BestTotalHits, bests.BestTotalDeaths),
             new PlayerView(snapshot.Hp, snapshot.MaxHp, snapshot.PlayerLoaded, snapshot.IsLoading),
             snapshot.BossFightActive,
             tracker.ActiveIndex,
@@ -58,8 +72,18 @@ public sealed record OverlayState(
     }
 }
 
-/// <summary>The metric this run is ranked by, per the challenge profile.</summary>
-public sealed record PrimaryView(string Metric, int Value);
+/// <summary>
+/// What this profile wants shown. Keeps presentation decisions in the profile
+/// rather than hard-coded in the page, so adding a profile does not mean editing
+/// the overlay's rendering logic.
+/// </summary>
+public sealed record DisplayView(bool ShowSplitTimes, bool ShowSegmentBreakdown);
+
+/// <summary>The metric this run is ranked by, alongside the best ever achieved.</summary>
+public sealed record PrimaryView(string Metric, int Value, int? Best);
+
+/// <summary>Whole-run bests. Null where the route has never been completed.</summary>
+public sealed record BestsView(int? RunIgtMs, int? TotalHits, int? TotalDeaths);
 
 public sealed record PlayerView(int Hp, int MaxHp, bool Loaded, bool Loading);
 

@@ -3,6 +3,9 @@
 // EventSource reconnects on its own, so a host restart recovers without
 // touching OBS. We only track whether data is currently arriving, so the
 // overlay can say "disconnected" rather than silently freezing on stale numbers.
+//
+// What is shown is driven by state.display, which comes from the challenge
+// profile. Adding a profile should not mean editing this file.
 
 (() => {
   "use strict";
@@ -19,7 +22,10 @@
     activeName: el("activeName"),
     approachHits: el("approachHits"),
     bossHits: el("bossHits"),
-    totalHits: el("totalHits"),
+    primaryLabel: el("primaryLabel"),
+    primaryValue: el("primaryValue"),
+    primaryPb: el("primaryPb"),
+    deathsTotal: el("deathsTotal"),
     totalDeaths: el("totalDeaths"),
     hp: el("hp"),
     status: el("status"),
@@ -48,6 +54,15 @@
       : `${mins}:${pad(secs, 2)}.${pad(millis, 3)}`;
   }
 
+  // Lower is better for every metric we track: hits, deaths and time alike.
+  // "ahead" means beating the best, "behind" means worse than it.
+  function comparisonClass(value, best) {
+    if (best === null || best === undefined) return "";
+    if (value < best) return "is-ahead";
+    if (value > best) return "is-behind";
+    return "is-tied";
+  }
+
   // Which slice of the split list to show, clamped to the ends so the list
   // stays a constant height instead of shrinking at the start and finish.
   function windowSplits(splits, activeIndex) {
@@ -60,56 +75,87 @@
 
   function renderSplits(state) {
     const { from, to } = windowSplits(state.splits, state.activeIndex);
+    const showTimes = state.display.showSplitTimes;
     const rows = [];
 
     for (let i = from; i < to; i++) {
       const s = state.splits[i];
+      const isActive = i === state.activeIndex && state.phase === "Running";
+      const started = s.completed || isActive;
+
       const li = document.createElement("li");
       li.className = "split";
-      if (i === state.activeIndex && state.phase === "Running") li.classList.add("is-active");
+      li.classList.toggle("split--timed", showTimes);
+      if (isActive) li.classList.add("is-active");
       else if (s.completed) li.classList.add("is-done");
       else li.classList.add("is-pending");
 
       const name = document.createElement("span");
       name.className = "split__name";
       name.textContent = s.name;
+      li.append(name);
 
+      // Current hits, coloured against this split's own best.
       const hits = document.createElement("span");
       hits.className = "split__hits";
-      hits.textContent = s.hits > 0 ? `${s.hits}✕` : "";
+      if (started) {
+        hits.textContent = s.hits;
+        const cls = comparisonClass(s.hits, s.pbHits);
+        if (cls) hits.classList.add(cls);
+      } else {
+        hits.textContent = "–";
+      }
+      li.append(hits);
 
-      const time = document.createElement("span");
-      time.className = "split__time";
-      time.textContent = s.completed || i === state.activeIndex ? formatTime(s.igtMs) : "—";
+      // The best this split has ever been, so progress is legible at a glance.
+      const pb = document.createElement("span");
+      pb.className = "split__pb";
+      pb.textContent = s.pbHits === null || s.pbHits === undefined ? "pb –" : `pb ${s.pbHits}`;
+      li.append(pb);
 
-      li.append(name, hits, time);
+      if (showTimes) {
+        const time = document.createElement("span");
+        time.className = "split__time";
+        time.textContent = started ? formatTime(s.igtMs) : "–";
+        li.append(time);
+      }
+
       rows.push(li);
     }
 
     dom.splits.replaceChildren(...rows);
   }
 
-  function render(state) {
-    dom.overlay.classList.remove("is-disconnected");
-    dom.overlay.classList.toggle("is-boss-active", !!state.bossFightActive);
-
-    dom.runTimer.textContent = formatTime(state.runIgtMs);
-    dom.routeName.textContent = state.routeName || "—";
-    dom.profileName.textContent = state.profileName || "";
-
-    renderSplits(state);
-
+  function renderActiveSegments(state) {
     const active = state.splits[state.activeIndex];
-    if (active && state.phase === "Running") {
-      dom.active.hidden = false;
-      dom.activeName.textContent = active.name;
-      dom.approachHits.textContent = active.approach.hits;
-      dom.bossHits.textContent = active.boss.hits;
-    } else {
-      dom.active.hidden = true;
-    }
+    const show = state.display.showSegmentBreakdown && active && state.phase === "Running";
 
-    dom.totalHits.textContent = state.totalHits;
+    dom.active.hidden = !show;
+    if (!show) return;
+
+    dom.activeName.textContent = active.name;
+    dom.approachHits.textContent = active.approach.hits;
+    dom.bossHits.textContent = active.boss.hits;
+  }
+
+  function renderTotals(state) {
+    const primary = state.primary;
+    const isTime = primary.metric === "Time";
+
+    dom.primaryLabel.textContent = primary.metric;
+    dom.primaryValue.textContent = isTime ? formatTime(primary.value) : primary.value;
+    dom.primaryValue.className = "total__value";
+    const cls = comparisonClass(primary.value, primary.best);
+    if (cls) dom.primaryValue.classList.add(cls);
+
+    dom.primaryPb.textContent =
+      primary.best === null || primary.best === undefined
+        ? "pb –"
+        : `pb ${isTime ? formatTime(primary.best) : primary.best}`;
+
+    // Deaths are already the primary metric for a Deathless run; showing the
+    // same number twice would just be noise.
+    dom.deathsTotal.hidden = primary.metric === "Deaths";
     dom.totalDeaths.textContent = state.totalDeaths;
 
     const p = state.player;
@@ -117,9 +163,22 @@
       dom.hp.textContent = `${p.hp}/${p.maxHp}`;
       dom.hp.classList.toggle("is-low", p.maxHp > 0 && p.hp / p.maxHp < 0.3);
     } else {
-      dom.hp.textContent = state.attached ? "—" : "no game";
+      dom.hp.textContent = state.attached ? "–" : "no game";
       dom.hp.classList.remove("is-low");
     }
+  }
+
+  function render(state) {
+    dom.overlay.classList.remove("is-disconnected");
+    dom.overlay.classList.toggle("is-boss-active", !!state.bossFightActive);
+
+    dom.runTimer.textContent = formatTime(state.runIgtMs);
+    dom.routeName.textContent = state.routeName || "–";
+    dom.profileName.textContent = state.profileName || "";
+
+    renderSplits(state);
+    renderActiveSegments(state);
+    renderTotals(state);
   }
 
   function markDisconnected(message) {

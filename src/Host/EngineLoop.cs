@@ -72,14 +72,14 @@ public sealed class EngineLoop : BackgroundService
 
             if (DateTime.UtcNow - _lastAttachAttempt < AttachRetryInterval)
             {
-                Publish(GameSnapshot.Detached);
+                Observe(GameSnapshot.Detached);
                 return;
             }
 
             _lastAttachAttempt = DateTime.UtcNow;
             if (!_source.Attach())
             {
-                Publish(GameSnapshot.Detached);
+                Observe(GameSnapshot.Detached);
                 return;
             }
 
@@ -87,11 +87,17 @@ public sealed class EngineLoop : BackgroundService
             _log.LogInformation("Attached to {Source}.", _source.Description);
         }
 
-        var snapshot = _source.TakeSnapshot();
-        _run.Tick(snapshot, _source.Flags, _source.Generation);
-        Publish(snapshot);
+        Observe(_source.TakeSnapshot());
     }
 
-    private void Publish(GameSnapshot snapshot) =>
+    /// <summary>
+    /// Feed one reading to the tracker and publish the result. Detached readings
+    /// go through here too: the controller needs to see the game disappear so it
+    /// can freeze the run and re-check on return, rather than silently missing it.
+    /// </summary>
+    private void Observe(GameSnapshot snapshot)
+    {
+        _run.Tick(snapshot, _source.Flags, _source.Generation);
         _bus.Publish(JsonSerializer.Serialize(_run.Project(snapshot), Json));
+    }
 }

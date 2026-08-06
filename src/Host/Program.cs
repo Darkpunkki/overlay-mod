@@ -1,5 +1,5 @@
-using System.Text.Json;
 using OverlayMod.Engine.GameState;
+using OverlayMod.Engine.Persistence;
 using OverlayMod.Host;
 
 // The overlay host: polls the game (or a scripted fake), runs the tracker, and
@@ -18,6 +18,8 @@ builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<ISnapshotSource>(_ =>
     options.UseFake ? new FakeSnapshotSource() : new Ds3Reader());
+builder.Services.AddSingleton<IRecordStore>(_ => new JsonRecordStore(options.RecordsPath));
+builder.Services.AddSingleton(_ => new RunStateStore(options.RunStatePath));
 builder.Services.AddSingleton<RunController>();
 builder.Services.AddSingleton<StateBroadcaster>();
 builder.Services.AddHostedService<EngineLoop>();
@@ -88,6 +90,7 @@ Console.WriteLine($"""
       overlay  : {options.OverlayUrl}
       stream   : http://127.0.0.1:{options.Port}/events
       state    : http://127.0.0.1:{options.Port}/api/state
+      data     : {Path.GetFullPath(options.DataDirectory)}
 
     Point an OBS Browser Source at the overlay URL. Ctrl+C to stop.
 

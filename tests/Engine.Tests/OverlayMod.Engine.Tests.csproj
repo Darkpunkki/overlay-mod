@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Engine\OverlayMod.Engine.csproj" />
+    <!-- Resume-across-restart behaviour lives in the host's RunController, and
+         it is the part most worth testing directly. -->
+    <ProjectReference Include="..\..\src\Host\OverlayMod.Host.csproj" />
   </ItemGroup>
 
 </Project>

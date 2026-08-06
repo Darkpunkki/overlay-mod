@@ -46,9 +46,6 @@ Neither blocks Milestones 3 or 4.
 
 Decisions not yet made. Flagged here rather than silently assumed.
 
-- **What starts a run?** A hotkey, an IGT reset (new game), or entering the
-  first split's area? LiveSplit parity suggests a hotkey; a DS3 auto-splitter
-  suggests IGT. Probably both, with the hotkey as the override. *Needed by M4.*
 - **What resets a run?** Death is not a reset in a Deathless profile — it is a
   run-ending failure. The tracker has no "failed" phase yet. *Needed by M5.*
 - **Where do routes live?** JSON files on disk under `appdata/routes/` is the
@@ -68,6 +65,20 @@ Decisions not yet made. Flagged here rather than silently assumed.
   always-on-top desktop window is an optional extra, not a requirement.
 - **Read-only.** The engine never writes to game memory. This is a stated
   property of the project, not an implementation detail.
+- **A run starts when the player loads into the world.** Not on a hotkey, not on
+  an IGT reset. Being in a level is what "a run has begun" means; menus and
+  loading screens are not part of it.
+- **Quitting the game does not end a run.** DS3 keeps in-game time in the save,
+  so on returning the save's IGT is compared against the last value seen: at or
+  ahead of it means the same character continuing and the run resumes; behind it
+  means a different or fresh character and a new run starts. A *finished* run is
+  always replaced on return — loading back in is the next attempt.
+- **The profile decides what is displayed**, not the page. No-Hit shows combined
+  hits per split and no per-split times; time-based profiles show times. Every
+  metric is still recorded underneath regardless of what is shown.
+- **Personal bests are per-split as well as per-run** ("gold splits"), so the
+  overlay can show progress against the best each boss has *ever* been rather
+  than only against one best run.
 
 ---
 
@@ -256,9 +267,16 @@ Sketch only; expand when it becomes next.
 
 ## Milestone 6 — Persistence
 
-SQLite via `Microsoft.Data.Sqlite`. Completed runs, per-split bests, gold
-splits, personal-best comparison feeding the `pbIgtMs`/`pbHits` fields already
-reserved in the contract. Export to `.lss` (LiveSplit), CSV and JSON.
+**Partly done ahead of schedule.** Personal bests were needed for Milestone 4's
+overlay to be meaningful, so `JsonRecordStore` was built as a stopgap: finished
+runs land in `appdata/records.json`, and per-run and per-split bests are folded
+from them. `RunStateStore` separately checkpoints the *in-progress* run so it
+survives closing the overlay.
+
+Remaining for this milestone: replace the JSON store with SQLite via
+`Microsoft.Data.Sqlite` behind the existing `IRecordStore` interface (the
+overlay is unaffected either way), and add export to `.lss` (LiveSplit), CSV
+and JSON.
 
 ## Milestone 7 — Packaging
 

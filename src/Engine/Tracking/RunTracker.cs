@@ -50,6 +50,12 @@ public sealed class RunTracker
     /// <summary>Headline run timer: IGT elapsed since the run started.</summary>
     public int RunIgtMs => Phase == RunPhase.NotStarted ? 0 : Math.Max(0, _currentIgt - _runStartIgt);
 
+    /// <summary>
+    /// The most recent in-game time seen. Compared against a freshly attached
+    /// game's IGT to decide whether a run is being resumed or replaced.
+    /// </summary>
+    public int CurrentIgt => _currentIgt;
+
     public int TotalHits => Sum(static s => s.Hits);
     public int TotalDeaths => Sum(static s => s.Deaths);
     public int TotalSegmentIgtMs => Sum(static s => s.IgtMs);
@@ -100,8 +106,13 @@ public sealed class RunTracker
     {
         if (Phase != RunPhase.Running) return;
 
-        _currentIgt = snapshot.IgtMs;
         var inPlay = snapshot.Attached && snapshot.PlayerLoaded && !snapshot.IsLoading;
+
+        // Only in-play readings move the clock. At the main menu and during
+        // loads the game's IGT field is not meaningful, and letting it through
+        // would both jump the run timer and corrupt the value the resume check
+        // compares against.
+        if (inPlay) _currentIgt = snapshot.IgtMs;
         var kind = snapshot.BossFightActive ? SegmentKind.Boss : SegmentKind.Approach;
         var segment = _splits[_activeIndex].Segment(kind);
 
@@ -155,6 +166,68 @@ public sealed class RunTracker
             if (set && !_activeFlagWasSet) AdvanceSplit();
             else _activeFlagWasSet = set;
         }
+    }
+
+    /// <summary>Capture progress for storage, so the run can outlive the process.</summary>
+    public RunState? Capture()
+    {
+        if (_route is null || Phase == RunPhase.NotStarted) return null;
+
+        var splits = new List<SplitState>(_splits.Count);
+        foreach (var s in _splits)
+        {
+            splits.Add(new SplitState(
+                s.Name, s.IsBoss, s.Completed,
+                s.Approach.IgtMs, s.Approach.Hits, s.Approach.Deaths,
+                s.Boss.IgtMs, s.Boss.Hits, s.Boss.Deaths));
+        }
+
+        return new RunState(_route.Name, _runStartIgt, _currentIgt, _activeIndex, Phase, splits);
+    }
+
+    /// <summary>
+    /// Rehydrate a captured run. Returns false — leaving the tracker untouched —
+    /// if the state does not describe this route, which is the case when a stored
+    /// run is loaded after its route has been edited.
+    /// </summary>
+    public bool Restore(Route route, RunState state)
+    {
+        if (state.RouteName != route.Name) return false;
+        if (state.Splits.Count != route.Splits.Count) return false;
+
+        for (var i = 0; i < route.Splits.Count; i++)
+            if (state.Splits[i].Name != route.Splits[i].Name) return false;
+
+        _route = route;
+        _splits.Clear();
+        foreach (var s in state.Splits)
+        {
+            var split = new SplitResult(s.Name, s.IsBoss) { Completed = s.Completed };
+            split.Approach.IgtMs = s.ApproachIgtMs;
+            split.Approach.Hits = s.ApproachHits;
+            split.Approach.Deaths = s.ApproachDeaths;
+            split.Boss.IgtMs = s.BossIgtMs;
+            split.Boss.Hits = s.BossHits;
+            split.Boss.Deaths = s.BossDeaths;
+            _splits.Add(split);
+        }
+
+        _activeIndex = Math.Clamp(state.ActiveIndex, 0, Math.Max(0, _splits.Count));
+        _runStartIgt = state.RunStartIgt;
+        _currentIgt = state.CurrentIgt;
+        Phase = state.Phase;
+
+        // Deliberately not restored: the previous tick's IGT and HP. A restored
+        // run has a gap behind it, and treating the first new reading as a delta
+        // would invent time or a phantom hit. Both re-arm on the next tick.
+        _hasLastIgt = false;
+        _lastIgt = state.CurrentIgt;
+        _hasPrevHp = false;
+        _prevHp = 0;
+        _prevDecreasing = false;
+        _activeFlagWasSet = false;
+
+        return true;
     }
 
     private void AdvanceSplit()

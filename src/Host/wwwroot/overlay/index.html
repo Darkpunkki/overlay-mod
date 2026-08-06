@@ -18,6 +18,8 @@
 
     <ol class="splits" id="splits"></ol>
 
+    <!-- Approach/boss breakdown. Hidden unless the profile asks for it; a
+         No-Hit run wants one combined number per boss. -->
     <section class="active" id="active" hidden>
       <div class="active__name" id="activeName"></div>
       <div class="active__segments">
@@ -33,9 +35,19 @@
     </section>
 
     <footer class="totals">
-      <div class="total"><span class="total__label">Hits</span><span class="total__value" id="totalHits">0</span></div>
-      <div class="total"><span class="total__label">Deaths</span><span class="total__value" id="totalDeaths">0</span></div>
-      <div class="total total--hp"><span class="total__label">HP</span><span class="total__value" id="hp">&mdash;</span></div>
+      <div class="total total--primary">
+        <span class="total__label" id="primaryLabel">Hits</span>
+        <span class="total__value" id="primaryValue">0</span>
+        <span class="total__pb" id="primaryPb"></span>
+      </div>
+      <div class="total" id="deathsTotal">
+        <span class="total__label">Deaths</span>
+        <span class="total__value" id="totalDeaths">0</span>
+      </div>
+      <div class="total total--hp">
+        <span class="total__label">HP</span>
+        <span class="total__value" id="hp">&mdash;</span>
+      </div>
     </footer>
 
     <div class="status" id="status">connecting&hellip;</div>
