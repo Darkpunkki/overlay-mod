@@ -252,10 +252,23 @@ public sealed class RunController
         // Negative means it moved forward, which is the ordinary case.
         var rewindMs = _tracker.CurrentIgt - snapshot.IgtMs;
 
-        // A save that has barely been played is a different character, not the
-        // same one rewound — this catches the case where the previous run was
-        // short enough that the rewind tolerance alone would not notice.
-        var freshCharacter = snapshot.IgtMs < FreshCharacterIgtMs && _tracker.CurrentIgt >= FreshCharacterIgtMs;
+        // A save that has barely been played, whose clock has gone backwards, is
+        // a different character rather than the same one rewound.
+        //
+        // This used to ask whether the *previous* run was long — which is the
+        // wrong side of the comparison, and meant starting a new game after a
+        // short session carried the old run's hits straight into it. Two minutes
+        // of testing, then New Game, and the counter kept climbing: the rewind
+        // was under a minute, comfortably inside the tolerance below, and
+        // nothing else objected.
+        //
+        // Below a minute of in-game time, a backwards clock is called a new
+        // character even though a genuine save could rewind that far. Both
+        // readings are cheap to be wrong about there — a run under a minute old
+        // has nothing in it worth carrying — and the same mistake at the other
+        // end of a two-hour attempt is not survivable, which is what the rewind
+        // tolerance protects.
+        var freshCharacter = snapshot.IgtMs < FreshCharacterIgtMs && snapshot.IgtMs < _tracker.CurrentIgt;
         var sameRun = !freshCharacter && rewindMs <= ResumeRewindToleranceMs;
 
         _log.LogInformation(

@@ -170,6 +170,12 @@
         <dt>Phase</dt><dd id="factPhase">—</dd>
         <dt>Timer</dt><dd id="factTimer">—</dd>
         <dt>Split</dt><dd id="factSplit">—</dd>
+        <!-- Health is never shown on the overlay — the game already shows it,
+             and it would cost space for nothing. Here it is the single most
+             useful fact when counters are not moving, because damage, hits and
+             deaths are all derived from it: if this reads zero on a live
+             character, the memory offsets are wrong for that build. -->
+        <dt>Health</dt><dd id="factHealth">—</dd>
       </dl>
       <p class="hint">Overlay URL for OBS: <code id="overlayUrl">/overlay/</code></p>
     </details>

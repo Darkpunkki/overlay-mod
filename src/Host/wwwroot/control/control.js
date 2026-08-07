@@ -23,6 +23,7 @@
     factPhase: el("factPhase"),
     factTimer: el("factTimer"),
     factSplit: el("factSplit"),
+    factHealth: el("factHealth"),
     overlayUrl: el("overlayUrl"),
     hotkeys: el("hotkeys"),
     fdEvents: el("fdEvents"),
@@ -419,6 +420,48 @@
   }
 
   el("fdRefresh").addEventListener("click", loadDamageEvents);
+
+  // --- health, read straight from the game ---
+  //
+  // Deliberately not part of the state stream: the overlay must never show
+  // health, so it has no business in the view model at thirty frames a second.
+  // This is a diagnostic, polled slowly, and it answers the one question that
+  // matters when nothing is counting — is the health read working at all?
+
+  async function loadHealth() {
+    let d;
+    try {
+      d = await (await fetch("/api/diagnostics")).json();
+    } catch {
+      dom.factHealth.textContent = "—";
+      return;
+    }
+
+    if (!d.snapshot) {
+      dom.factHealth.textContent = d.note ? "not applicable (demo source)" : "—";
+      return;
+    }
+
+    if (!d.attached) {
+      dom.factHealth.textContent = "—";
+      return;
+    }
+
+    const { hp, maxHp } = d.snapshot;
+    if (!d.snapshot.playerLoaded) {
+      dom.factHealth.textContent = "not in a level";
+    } else if (maxHp > 0) {
+      dom.factHealth.textContent = `${hp} / ${maxHp}`;
+    } else {
+      // Damage, hits and deaths are all derived from this reading, so a live
+      // character reading zero explains every counter sitting still at once.
+      dom.factHealth.textContent =
+        `${hp} / ${maxHp} — not reading correctly for this game build`;
+    }
+  }
+
+  loadHealth();
+  setInterval(loadHealth, 2000);
 
   // --- live status, from the same stream the overlay uses ---
 

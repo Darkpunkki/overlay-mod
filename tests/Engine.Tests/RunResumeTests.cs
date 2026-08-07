@@ -153,6 +153,59 @@ public class RunResumeTests : IDisposable
     }
 
     [Fact]
+    public void StartingANewGameAfterAShortSessionResetsTheCounters()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        // Two minutes of poking about, then New Game. The old rule asked whether
+        // the *previous* run was long, so a short one made the rewind look like
+        // an ordinary save-point rewind and the hits carried straight over.
+        Settle(c, Play(30_000, 1000), flags);
+        c.Tick(Play(31_000, 900), flags, 0);
+        Assert.Equal(1, HitsOf(c, Play(31_000, 900)));
+
+        c.Tick(Menu(31_000), flags, 0);
+        Settle(c, Play(500, 1000), flags);   // a brand new character
+
+        Assert.Equal(0, HitsOf(c, Play(500, 1000)));
+    }
+
+    [Fact]
+    public void StartingANewGameAfterALongRunAlsoResets()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        Settle(c, Play(TwentyMinutes, 1000), flags);
+        c.Tick(Play(TwentyMinutes + 1_000, 900), flags, 0);
+        Assert.Equal(1, HitsOf(c, Play(TwentyMinutes + 1_000, 900)));
+
+        c.Tick(Menu(TwentyMinutes + 1_000), flags, 0);
+        Settle(c, Play(2_000, 1000), flags);
+
+        Assert.Equal(0, HitsOf(c, Play(2_000, 1000)));
+    }
+
+    [Fact]
+    public void AShortRunCarryingOnForwardsIsStillTheSameRun()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        // The counterpart to the two above: under a minute of in-game time, a
+        // clock that has moved *forwards* is the same character continuing.
+        Settle(c, Play(20_000, 1000), flags);
+        c.Tick(Play(21_000, 900), flags, 0);
+        Assert.Equal(1, HitsOf(c, Play(21_000, 900)));
+
+        c.Tick(Menu(21_000), flags, 0);
+        Settle(c, Play(25_000, 1000), flags);
+
+        Assert.Equal(1, HitsOf(c, Play(25_000, 1000)));
+    }
+
+    [Fact]
     public void QuittingToDesktopAndReturningResumesTheSameRun()
     {
         var c = NewController();

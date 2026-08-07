@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.2.1
+
+Two counting bugs. **If 0.2.0 counted nothing for you while the timer kept
+running, this is the release you want.**
+
+### Fixed
+
+- **Damage, hits and deaths could all stop together, on some machines only.**
+  0.2.0 refused to read health at all unless maximum health also read as a
+  positive number — a check meant to prove the reading was real. Nothing before
+  it used maximum health for anything. On a build where that particular offset
+  reads zero it silently switched off every counter at once, while the run
+  timer, which needs no such reading, carried on as if nothing were wrong. Every
+  challenge that counts something looked broken; Speedrun looked fine.
+
+  Counting no longer depends on it. A death is now confirmed by lasting: zero
+  health across several consecutive readings, which tells a body on the ground
+  from a pointer briefly reading zero while the game rebuilds it — and needs no
+  extra offset to be right.
+
+- **Starting a new game did not reset the counters** if the previous session had
+  been short. The check for "this is a different character" asked whether the
+  *previous* run was more than a minute long, which is the wrong side of the
+  comparison: after a couple of minutes of testing, New Game looked like an
+  ordinary save-point rewind and the old run's hits carried straight over. It
+  now asks about the save you just loaded, not the one you left. This bug was in
+  0.1.0 too.
+
+- **Hits are no longer counted during loading screens.** 0.2.0 read health
+  through them; two readings either side of a load describe different worlds.
+  Deaths still watch through the load, which is what stops the death fade hiding
+  them.
+
+### Added
+
+- **Health on the control panel**, under **Now**. It is still never shown on the
+  overlay — the game already shows it. But damage, hits and deaths are all
+  derived from that one reading, so when nothing is counting it is the fact
+  worth seeing: a live character reading `0 / 0` means the memory offsets are
+  wrong for that build, and no amount of playing will move the counters.
+
 ## 0.2.0
 
 ### Challenges
