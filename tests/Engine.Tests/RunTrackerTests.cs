@@ -46,6 +46,15 @@ public class RunTrackerTests
     private static Route RouteOf(params RouteSplit[] splits) =>
         new("test", ChallengeProfile.NoHit, splits);
 
+    /// <summary>
+    /// Hold a reading for long enough to outlast the death confirmation. A real
+    /// corpse lies there for seconds; this is a fraction of one.
+    /// </summary>
+    private static void Hold(RunTracker t, GameSnapshot s, int ticks = 6)
+    {
+        for (var i = 0; i < ticks; i++) t.Update(s);
+    }
+
     private sealed class FakeFlags : IFlagSource
     {
         public readonly HashSet<uint> Set = new();
@@ -234,11 +243,11 @@ public class RunTrackerTests
         t.Start(RouteOf(new RouteSplit("A", false)), Play(0, 1000));
 
         t.Update(Play(0, 1000)); // baseline
-        t.Update(Play(0, 0));    // death: 1 death + killing-blow hit
+        Hold(t, Play(0, 0));     // death: 1 death + killing-blow hit
         Assert.Equal(1, t.ActiveSplit!.Approach.Deaths);
         Assert.Equal(1, t.ActiveSplit.Approach.Hits);
 
-        t.Update(Play(0, 0));     // still dead, no change
+        Hold(t, Play(0, 0));      // still dead, no change
         t.Update(Loading(0));     // load to bonfire
         t.Update(Play(0, 1000));  // respawn refill -> not a hit
 
@@ -257,7 +266,7 @@ public class RunTrackerTests
         // The game raises its loading flag as the death fade starts, so the
         // tick where health first reads zero may not be an in-play tick at all.
         // Detecting death as an edge needs both of its neighbours and loses it.
-        t.Update(LoadingWithBody(0, 0));
+        Hold(t, LoadingWithBody(0, 0));
 
         Assert.Equal(1, t.ActiveSplit!.Approach.Deaths);
     }
@@ -270,7 +279,7 @@ public class RunTrackerTests
 
         t.Update(Play(0, 1000));
         t.Update(GameSnapshot.Detached);  // a dropped poll, or the game stuttering
-        t.Update(Play(0, 0));             // the corpse is all we ever see
+        Hold(t, Play(0, 0));              // the corpse is all we ever see
 
         Assert.Equal(1, t.ActiveSplit!.Approach.Deaths);
     }
@@ -283,8 +292,7 @@ public class RunTrackerTests
 
         // Health has never been seen above zero, so this is a reading we cannot
         // interpret rather than a death that just happened.
-        t.Update(Play(0, 0));
-        t.Update(Play(0, 0));
+        Hold(t, Play(0, 0), ticks: 60);
 
         Assert.Equal(0, t.ActiveSplit!.Approach.Deaths);
     }
@@ -309,10 +317,10 @@ public class RunTrackerTests
         t.Start(RouteOf(new RouteSplit("A", false)), Play(0, 1000));
 
         t.Update(Play(0, 1000));
-        t.Update(Play(0, 0));       // first death
+        Hold(t, Play(0, 0));        // first death
         t.Update(Loading(0));       // back to the bonfire
         t.Update(Play(0, 1000));
-        t.Update(Play(0, 0));       // second death
+        Hold(t, Play(0, 0));        // second death
 
         Assert.Equal(2, t.ActiveSplit!.Approach.Deaths);
     }
@@ -325,13 +333,64 @@ public class RunTrackerTests
         t.Update(Play(0, 1000));
         t.Update(Loading(0));
 
-        // The first frames after a load report zeroes the game has not written
-        // yet. MaxHp is the tell: a live character always has one.
+        // The first frames after a load can report zeroes the game has not
+        // written yet. They pass in an instant, which is what tells them apart
+        // from a corpse - not any second reading from memory.
+        t.Update(new GameSnapshot { Attached = true, PlayerLoaded = true, Hp = 0, MaxHp = 0 });
         t.Update(new GameSnapshot { Attached = true, PlayerLoaded = true, Hp = 0, MaxHp = 0 });
         t.Update(Play(0, 1000));
 
         Assert.Equal(0, t.ActiveSplit!.Approach.Deaths);
         Assert.Equal(0, t.ActiveSplit.Approach.Damage);
+    }
+
+    [Fact]
+    public void Health_IsTrackedWhenMaxHealthReadsZero()
+    {
+        // 0.2.0 required MaxHp > 0 as proof the reading was real, which switched
+        // every counter off on a game where that offset reads zero: damage, hits
+        // and deaths all stuck at zero while the timer carried on, because the
+        // timer needs no such reading. Nothing here may depend on max health.
+        var t = new RunTracker();
+        var alive = new GameSnapshot { Attached = true, PlayerLoaded = true, IgtMs = 0, Hp = 1000, MaxHp = 0 };
+        var hurt = alive with { Hp = 900 };
+
+        t.Start(RouteOf(new RouteSplit("A", false)), alive);
+        t.Update(alive);
+        t.Update(hurt);
+
+        Assert.Equal(1, t.ActiveSplit!.Approach.Damage);
+        Assert.Equal(1, t.ActiveSplit.Approach.Hits);
+    }
+
+    [Fact]
+    public void Death_IsCountedWhenMaxHealthReadsZero()
+    {
+        var t = new RunTracker();
+        var alive = new GameSnapshot { Attached = true, PlayerLoaded = true, Hp = 1000, MaxHp = 0 };
+
+        t.Start(RouteOf(new RouteSplit("A", false)), alive);
+        t.Update(alive);
+        Hold(t, alive with { Hp = 0 });
+
+        Assert.Equal(1, t.ActiveSplit!.Approach.Deaths);
+    }
+
+    [Fact]
+    public void Hits_AreNotInventedAcrossALoadingScreen()
+    {
+        var t = new RunTracker();
+        t.Start(RouteOf(new RouteSplit("A", false)), Play(0, 1000));
+        t.Update(Play(0, 1000));
+
+        // Health readings taken during a load describe a world being torn down
+        // and rebuilt. Comparing them against the last one seen in play would
+        // book damage nobody took.
+        t.Update(LoadingWithBody(0, 400));
+        t.Update(LoadingWithBody(0, 200));
+        t.Update(Play(0, 1000));
+
+        Assert.Equal(0, t.ActiveSplit!.Approach.Damage);
     }
 
     // --- approach vs boss attribution ---

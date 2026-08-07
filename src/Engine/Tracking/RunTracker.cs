@@ -26,6 +26,17 @@ public sealed class RunTracker
     /// <summary>How many damage events to keep for review. Enough to cover a boss fight.</summary>
     private const int RecentDamageCapacity = 40;
 
+    /// <summary>
+    /// Consecutive readings of zero health that confirm a death.
+    ///
+    /// At the default 30 Hz poll this is about a seventh of a second — longer
+    /// than a pointer chain reads zero while it is being rebuilt around a load,
+    /// and far shorter than a body lies on the ground. Counted in ticks rather
+    /// than in-game time on purpose: in-game time stops during exactly the loads
+    /// this is meant to see through.
+    /// </summary>
+    private const int DeathConfirmTicks = 4;
+
     private Route? _route;
     private readonly List<SplitResult> _splits = new();
     private readonly List<DamageEvent> _recentDamage = new(RecentDamageCapacity);
@@ -47,6 +58,9 @@ public sealed class RunTracker
 
     /// <summary>Set while health is at zero, so one death is counted however long the body lies there.</summary>
     private bool _deathLatched;
+
+    /// <summary>Consecutive zero-health readings, so a momentary bad read is not a death.</summary>
+    private int _zeroHpTicks;
 
     private bool _activeFlagWasSet;
 
@@ -157,26 +171,28 @@ public sealed class RunTracker
 
         // --- damage & deaths from HP transitions ---
         //
-        // Health is tracked whenever the character object exists, which is a
-        // wider condition than being in play: the game raises its loading flag
-        // while the death animation is still running, and a death that needs the
-        // ticks either side of it to be in play is lost exactly when the flag
-        // comes up early. Deaths are what Deathless is judged on, so missing one
-        // is not a rounding error.
+        // Health is read whenever the character object exists, which is a wider
+        // condition than being in play, so that a death is still seen if the
+        // game raises its loading flag while the death animation is running.
         //
-        // A zero MaxHP means the data module has not been populated yet — the
-        // first frames after a load read zeros — and a zero read there is
-        // indistinguishable from a corpse.
-        var characterPresent = snapshot.Attached && snapshot.PlayerLoaded && snapshot.MaxHp > 0;
+        // Nothing here may depend on max health. 0.2.0 required MaxHp > 0 as
+        // proof the data module was populated, and on a game where that offset
+        // reads zero it silently switched every counter off — damage, hits and
+        // deaths all stuck at zero while the timer, which needs no such reading,
+        // carried on. A guard that can disable the entire feature it protects is
+        // worse than the transient it was guarding against; persistence does
+        // that job instead, and needs no offset to be right. See DeathConfirmTicks.
+        var characterPresent = snapshot.Attached && snapshot.PlayerLoaded;
 
         if (characterPresent)
         {
-            _fall.Observe(snapshot.IgtMs, snapshot.Y);
-            TrackHealth(segment, snapshot);
+            if (inPlay) _fall.Observe(snapshot.IgtMs, snapshot.Y);
+            TrackHealth(segment, snapshot, inPlay);
         }
         else
         {
             ForgetLastReading();
+            _zeroHpTicks = 0;
         }
 
         // --- auto-split on boss-defeat flag (rising edge) ---
@@ -196,42 +212,63 @@ public sealed class RunTracker
     /// from a positive previous reading. An edge needs both of its neighbours,
     /// and the tick where health first reads zero is exactly the tick the game
     /// may also flip its loading flag or free the character — so the edge is
-    /// there to be missed. Zero health while the character exists is a death
-    /// whether or not the tick before it was observed; the latch clears when
-    /// health returns, so lying dead for ten seconds still counts once.
+    /// there to be missed. The latch clears when health returns, so lying dead
+    /// for ten seconds still counts once.
+    ///
+    /// A corpse is told from a bad reading by how long it lasts, not by any
+    /// second opinion from memory: the pointer chain being torn down around a
+    /// load reads zero for an instant, a dead player reads zero for seconds.
+    ///
+    /// Hits, unlike deaths, are counted only while in play. Two health readings
+    /// taken either side of a loading screen describe different worlds, and
+    /// subtracting one from the other invents damage nobody took.
     /// </summary>
-    private void TrackHealth(SegmentResult segment, in GameSnapshot snapshot)
+    private void TrackHealth(SegmentResult segment, in GameSnapshot snapshot, bool inPlay)
     {
         var hp = snapshot.Hp;
 
         if (hp <= 0)
         {
-            if (_hasSeenAlive && !_deathLatched)
+            _zeroHpTicks++;
+
+            // _hasSeenAlive keeps this from firing when the overlay attaches to a
+            // player who is already dead: that is a state with no history behind
+            // it, not a death that just happened.
+            if (_hasSeenAlive && !_deathLatched && _zeroHpTicks >= DeathConfirmTicks)
             {
                 _deathLatched = true;
                 segment.Deaths++;
                 RecordDamage(segment, snapshot, fatal: true); // the killing blow is itself damage
             }
 
+            // Leave the previous reading alone: respawning at full health is not
+            // a heal, and the health before the death is the right baseline for
+            // the next drop.
             _prevDecreasing = false;
+            return;
+        }
+
+        _zeroHpTicks = 0;
+        _deathLatched = false;
+        _hasSeenAlive = true;
+
+        if (!inPlay)
+        {
+            ForgetLastReading();
+            return;
+        }
+
+        if (_hasPrevHp && hp < _prevHp)
+        {
+            // A drop spread over several ticks is one hit, not one per tick.
+            if (!_prevDecreasing) RecordDamage(segment, snapshot, fatal: false);
+            _prevDecreasing = true;
         }
         else
         {
-            _deathLatched = false;
-            _hasSeenAlive = true;
-
-            if (_hasPrevHp && hp < _prevHp)
-            {
-                // A drop spread over several ticks is one hit, not one per tick.
-                if (!_prevDecreasing) RecordDamage(segment, snapshot, fatal: false);
-                _prevDecreasing = true;
-            }
-            else
-            {
-                // Stable or healed: end the current decrease so the next distinct
-                // drop counts as a new hit.
-                _prevDecreasing = false;
-            }
+            // Stable or healed: end the current decrease so the next distinct
+            // drop counts as a new hit.
+            _prevDecreasing = false;
         }
 
         _prevHp = hp;
@@ -286,6 +323,7 @@ public sealed class RunTracker
         ForgetLastReading();
         _hasSeenAlive = false;
         _deathLatched = false;
+        _zeroHpTicks = 0;
     }
 
     /// <summary>Capture progress for storage, so the run can outlive the process.</summary>
