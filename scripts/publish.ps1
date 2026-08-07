@@ -79,8 +79,13 @@ if (-not (Test-Path $exe)) { throw "Publish reported success but $exe is missing
 
 $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 
+# Read the version from the project rather than repeating it here. A hard-coded
+# one in the release hint below is worse than none: it is right once and wrong
+# from the next bump onwards, which is how v0.1.0 came to be printed forever.
+$version = (Select-String -Path $project -Pattern '<Version>(.+?)</Version>').Matches.Groups[1].Value
+
 Write-Host ""
-Write-Host "Built $exe ($size MB)" -ForegroundColor Green
+Write-Host "Built $exe ($size MB), version $version" -ForegroundColor Green
 if ($Slim) { Write-Host "Slim build: the target machine needs .NET 8 installed." -ForegroundColor Yellow }
 Write-Host ""
 Write-Host "Run it and OverlayMod appears in the notification area."
@@ -88,4 +93,5 @@ Write-Host "Right-click the icon for the overlay and control-panel links."
 Write-Host "Data and logs are written next to the executable, in .\appdata\."
 Write-Host ""
 Write-Host "To publish a release:" -ForegroundColor Cyan
-Write-Host "  gh release create v0.1.0 `"$exe`" --title `"OverlayMod v0.1.0`" --notes `"...`""
+Write-Host "  git tag v$version; git push origin v$version"
+Write-Host "  gh release create v$version `"$exe`" --title `"OverlayMod v$version`" --notes-file CHANGELOG.md"

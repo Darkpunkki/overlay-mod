@@ -1,27 +1,40 @@
+using System.Text.Json.Serialization;
+
 namespace OverlayMod.Engine.Tracking;
 
+[JsonConverter(typeof(ChallengeTypeJsonConverter))]
 public enum ChallengeType
 {
+    NoDamage,
     NoHit,
     Deathless,
-    AnyPercent,
-    AllBosses,
+    Speedrun,
 }
 
-/// <summary>The metric a profile is ranked by, and which split box is emphasised.</summary>
+/// <summary>The metric a profile is ranked by, and which value each split shows.</summary>
 public enum RunMetric
 {
+    /// <summary>Every drop in health, whatever caused it — falls included.</summary>
+    Damage,
+
+    /// <summary>Damage the player was dealt, with fall damage excluded.</summary>
     Hits,
+
     Deaths,
     Time,
 }
 
 /// <summary>
 /// A challenge profile decides what a run is judged on and what the overlay
-/// shows. Hits, deaths and approach/boss times are always recorded internally —
-/// they are cheap and a later profile may want them — but a profile only
-/// displays what is relevant to it. A No-Hit runner cares about hits per boss
-/// and the total clock, not per-boss times.
+/// shows. Damage, fall damage, deaths and approach/boss times are always
+/// recorded internally — they are cheap and a later profile may want them — but a
+/// profile only displays what is relevant to it.
+///
+/// **No Damage versus No Hit.** They differ in one respect: No Damage counts
+/// every drop in health, so mistiming a drop costs you the run; No Hit ignores
+/// damage the fall detector attributes to landing, so it measures only what the
+/// game dealt you. No Damage is the stricter of the two and the one that needs no
+/// heuristic to be correct.
 /// </summary>
 /// <param name="PrimaryMetric">
 /// What the run is ranked by. This is also what each split shows, alongside that
@@ -29,43 +42,37 @@ public enum RunMetric
 /// a No-Hit run wants hits. One metric per profile keeps the overlay narrow and
 /// keeps the comparison meaningful.
 /// </param>
-/// <param name="ShowSegmentBreakdown">Show approach and boss hits separately rather than combined.</param>
-/// <param name="ShowDeaths">
-/// Show a separate death total. Off for No-Hit, where a death is a failed run
-/// rather than a statistic, and off for Deathless, where deaths are already the
-/// primary metric and would simply appear twice.
+/// <param name="ShowTotalsFooter">
+/// Show the totals footer under the split list. Off for Speedrun, where the
+/// primary metric is time and the footer would simply repeat the run timer
+/// already sitting at the top of the overlay in a larger font.
 /// </param>
 public sealed record ChallengeProfile(
     ChallengeType Type,
     string Name,
     RunMetric PrimaryMetric,
-    bool ShowSegmentBreakdown,
-    bool ShowDeaths)
+    bool ShowTotalsFooter)
 {
+    public static readonly ChallengeProfile NoDamage = new(
+        ChallengeType.NoDamage, "No Damage", RunMetric.Damage, ShowTotalsFooter: true);
+
     public static readonly ChallengeProfile NoHit = new(
-        ChallengeType.NoHit, "No-Hit", RunMetric.Hits,
-        ShowSegmentBreakdown: false, ShowDeaths: false);
+        ChallengeType.NoHit, "No Hit", RunMetric.Hits, ShowTotalsFooter: true);
 
     public static readonly ChallengeProfile Deathless = new(
-        ChallengeType.Deathless, "Deathless", RunMetric.Deaths,
-        ShowSegmentBreakdown: false, ShowDeaths: false);
+        ChallengeType.Deathless, "Deathless", RunMetric.Deaths, ShowTotalsFooter: true);
 
-    public static readonly ChallengeProfile AnyPercent = new(
-        ChallengeType.AnyPercent, "Any%", RunMetric.Time,
-        ShowSegmentBreakdown: false, ShowDeaths: true);
-
-    public static readonly ChallengeProfile AllBosses = new(
-        ChallengeType.AllBosses, "All Bosses", RunMetric.Time,
-        ShowSegmentBreakdown: true, ShowDeaths: true);
+    public static readonly ChallengeProfile Speedrun = new(
+        ChallengeType.Speedrun, "Speedrun", RunMetric.Time, ShowTotalsFooter: false);
 
     public static ChallengeProfile For(ChallengeType type) => type switch
     {
+        ChallengeType.NoDamage => NoDamage,
         ChallengeType.NoHit => NoHit,
         ChallengeType.Deathless => Deathless,
-        ChallengeType.AnyPercent => AnyPercent,
-        ChallengeType.AllBosses => AllBosses,
+        ChallengeType.Speedrun => Speedrun,
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 
-    public static IReadOnlyList<ChallengeProfile> All => new[] { NoHit, Deathless, AnyPercent, AllBosses };
+    public static IReadOnlyList<ChallengeProfile> All => new[] { NoDamage, NoHit, Deathless, Speedrun };
 }

@@ -24,6 +24,7 @@ they will be filled in as each becomes next.
 | Player HP / MaxHP | **Working, verified live** (2026-06-30) |
 | Event-flag reads (boss defeats) | **Implemented, never verified against the game** |
 | Boss HP / boss-fight-active | **Not found.** No offset, no candidate |
+| Fall-damage classification | **Heuristic over player height, unverified live** (0.2.0) |
 | `RunTracker` state machine | **Working**, unit tested |
 | Host, SSE stream, fake source | **Working** (Milestone 3), 17 unit tests pass |
 | Overlay page | **Renders real data**; visual design pass is Milestone 4 |
@@ -65,16 +66,26 @@ persists, and the host runs happily before the game exists.
       chequerboard. Values are validated server-side before reaching CSS — they
       arrive over HTTP and are written into custom properties, so a malformed
       colour falls back to the default rather than being passed through.
+- [x] **A control page that fits on a screen** (0.2.0). Every section collapses
+      and remembers whether it was open, the split count is a number field from
+      1 to 30 rather than a slider capped at 20, and the build version is shown —
+      0.1.0 printed it nowhere, which made every bug report a round trip.
 
 ### 2. Complete visuals, differing per challenge
 
-**Done for No-Hit. Incomplete for the time-based profiles.**
+**Done.**
 
-- [x] **Split column follows the profile's metric.** Each split shows hits,
-      deaths or time — whichever the challenge is ranked by — against that
-      split's own best. This also fixed Deathless, which had been showing hits
-      per split. All three bests are always sent so the payload shape does not
+- [x] **Split column follows the profile's metric.** Each split shows damage,
+      hits, deaths or time — whichever the challenge is ranked by — against that
+      split's own best. Every best is always sent so the payload shape does not
       change with the profile.
+- [x] **Four challenges** (0.2.0): No Damage, No Hit, Deathless, Speedrun. Any%
+      and All Bosses removed; the All Bosses *routes* are unaffected.
+- [x] **Speedrun drops the totals footer** and puts the whole-run best under the
+      timer instead, rather than printing the same number twice.
+- [x] **Personal-best colouring is mirrored** between the live value and the
+      best, so one of the pair is always green and the other red.
+- [x] **The route name is off the overlay.** Chosen once, never changes mid-run.
 - [ ] **No end-of-run state.** A finished run just stops; there is no "run
       complete" treatment and no acknowledgement of a new personal best.
 - [ ] **Abandoned attempts leave no history.** Split bests now survive them, but
@@ -131,6 +142,8 @@ work that does not touch it.
 | 4 | **Boss-defeat flag ids** | Kill any boss and watch its split advance, or `GET /api/flags?ids=…` to check one directly | All 25 ids are now filled in from the published table, and the two already known match it — but none have been seen flipping in a real run |
 | 5 | **Player-loaded timing** | Watch when `player` flips true relative to regaining control | Decides whether runs start slightly early, during the fade-in |
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
+| 7 | **Fall-damage classification** | Take a survivable fall, then an ordinary hit, and read `GET /api/hits` back. See LIVE-TESTING 4.7 | The whole of No Hit rests on it, and the thresholds can only be set against a real game |
+| 8 | **Deaths register at all** | Die three times in one split under Deathless; the count should read three | Was broken before 0.2.0 and the fix is unproven live — see the decision on latching below |
 
 **[docs/LIVE-TESTING.md](LIVE-TESTING.md) is the walkthrough for this** — how to
 launch offline without EAC, and each check written as a pass/fail with what to
@@ -176,11 +189,51 @@ Decisions not yet made. Flagged here rather than silently assumed.
   ahead of it means the same character continuing and the run resumes; behind it
   means a different or fresh character and a new run starts. A *finished* run is
   always replaced on return — loading back in is the next attempt.
-- **The profile decides what is displayed**, not the page. No-Hit shows combined
-  hits per split, with no per-split times, no approach/boss breakdown and no
-  death counter — a death there is a failed run, not a statistic. Time-based
-  profiles show times and deaths. Every metric is still recorded underneath
-  regardless of what is shown.
+- **The profile decides what is displayed**, not the page. Each profile shows one
+  metric per split — the one it is ranked by — with no per-split times unless it
+  is ranked on time. Every metric is still recorded underneath regardless of what
+  is shown.
+- **Damage and hits are counted separately, and both are stored.** "Damage" is
+  every drop in health; "hits" is damage minus what the fall detector attributed
+  to landing. Deriving one from the other at display time was the alternative and
+  is wrong: which one a challenge is judged on changes, but both are facts about
+  what happened, so a run recorded under No Damage stays comparable against a No
+  Hit best.
+- **Fall damage is told apart by height, not by damage source.** Dark Souls III
+  applies its own SpEffect for a fall, which would be exact — but reading it
+  needs a pointer chain nobody here has found or verified, the same wall the
+  boss-HP offset is behind. Player position is already read every tick and is
+  confirmed working, so `FallDetector` asks whether the player had just finished
+  descending. **This is a heuristic and is presented as one:** the thresholds
+  live in `appdata/tracking.json` and on the control page, and every damage event
+  keeps the descent it measured so `GET /api/hits` can be read back after a run.
+  *The SpEffect read replaces it when the offset is found — same seam, different
+  classifier — and is worth doing in the same session as the boss-HP hunt.*
+- **A death is latched on zero health, not detected as an edge.** The original
+  code required a positive reading followed by a zero one, which needs both
+  neighbours of the transition. The game raises its loading flag as the death
+  fade begins, so the tick where health first reads zero is exactly the tick that
+  may not be in play — and the death was silently lost. Health at zero while the
+  character exists is now a death whether or not the previous tick was observed;
+  the latch clears when health returns. **The latch and "has been seen alive"
+  survive gaps in the readings** (a dropped poll, a stutter) and are cleared only
+  when a run starts, so a gap can neither lose a death nor produce a second one.
+  A zero `MaxHp` means the data module is not populated yet and is ignored
+  entirely — the frames right after a load read zeros the game has not written.
+- **Challenge names on disk are read leniently, never strictly.** A route file
+  whose challenge fails to parse is *skipped entirely* by `RouteStore`, so a
+  strict parse does not fall back to a default — it silently removes the route
+  from the picker. Removing Any% and All Bosses in 0.2.0 would have deleted the
+  All Bosses routes from every existing install. `ChallengeTypeJsonConverter` maps
+  what 0.1.0 wrote and falls back to No Damage rather than throwing.
+- **`NoHit` was deliberately not remapped when its meaning narrowed.** In 0.1.0
+  it counted fall damage, which is now No Damage. Pointing the old name at the
+  challenge that still bears it means an existing selection lands on the stricter
+  reading rather than on a differently-named one; the release notes say so, and
+  No Damage is one click away. **Stored bests went the other way**: those numbers
+  counted every drop in health, so they migrate into damage, and the hit best is
+  left null. Nothing in an old file says which of those hits was the ground, and
+  inventing one would put an unbeatable target on screen.
 - **Health is never displayed, on any profile.** The game's own UI already shows
   it, so repeating it costs overlay space and viewer attention for nothing. HP is
   still read — hits and deaths are derived from it — but it does not reach the
@@ -301,14 +354,15 @@ internals without breaking the page. Emitted as camelCase JSON on every tick:
   "attached": true,
   "phase": "Running",              // NotStarted | Running | Finished
   "routeName": "Demo (first three bosses)",
-  "profileName": "No-Hit",
+  "profileName": "No Hit",
   "runIgtMs": 754320,
-  "totalHits": 3,
+  "totalDamage": 4,                // every drop in health
+  "totalHits": 3,                  // ...minus what was attributed to a fall
   "totalDeaths": 0,
   "primary": { "metric": "Hits", "value": 3, "best": 9 },   // per challenge profile
-  "display": { "showSplitTimes": false, "showSegmentBreakdown": false, "showDeaths": false },
+  "display": { "splitMetric": "Hits", "showTotals": true },
   "player": { "loaded": true, "loading": false },
-  "bests": { "runIgtMs": 92498, "totalHits": 9, "totalDeaths": 1 },
+  "bests": { "runIgtMs": 92498, "totalDamage": 11, "totalHits": 9, "totalDeaths": 1 },
   "bossFightActive": false,
   "activeIndex": 2,
   "splits": [
@@ -317,12 +371,17 @@ internals without breaking the page. Emitted as camelCase JSON on every tick:
       "isBoss": true,
       "completed": true,
       "igtMs": 180000,
+      "damage": 2,
       "hits": 1,
       "deaths": 0,
-      "approach": { "igtMs": 120000, "hits": 0, "deaths": 0 },
-      "boss":     { "igtMs":  60000, "hits": 1, "deaths": 0 },
+      // Still sent, still displayed by nothing: the breakdown returns in
+      // Milestone 5, once boss-fight detection has an offset to stand on.
+      "approach": { "igtMs": 120000, "damage": 1, "hits": 0, "deaths": 0 },
+      "boss":     { "igtMs":  60000, "damage": 1, "hits": 1, "deaths": 0 },
       "pbIgtMs": 27493,            // best this split has ever been
-      "pbHits": 3
+      "pbDamage": 4,
+      "pbHits": 3,
+      "pbDeaths": 0
     }
   ]
 }

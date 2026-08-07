@@ -75,9 +75,9 @@ Troubleshooting.
 
 On the control page:
 
-- **Challenge** — No-Hit, Deathless, Any% or All Bosses. This decides what the
+- **Challenge** — No Damage, No Hit, Deathless or Speedrun. This decides what the
   overlay shows and what runs are ranked by.
-- **Route** — All Bosses (main game), All Bosses (with DLC), or Demo.
+- **Route** — All Bosses (main game), All Bosses (with DLC), Quick route, or Demo.
 
 Both are remembered for next time. Changing either abandons the run in progress,
 so choose before you start playing.
@@ -180,20 +180,47 @@ restarted, that line from `appdata/overlaymod.log` is exactly what I need.
 
 ### 4.6 — Deaths
 
-Die once. **Deaths** should go up by one. Note that under No-Hit and Deathless
-the death counter is deliberately hidden — switch to **Any%** on the control page
-to see it, or just watch that the hit count includes the killing blow.
+Switch to **Deathless** so the count is on screen, and die once. The split you
+are on should go up by one, and stay at one however long you lie there.
+
+Then die twice more in the same split and check it reads three. This is worth
+doing deliberately: deaths used to be detected as a transition between two
+consecutive readings, and the game raises its loading flag as the death fade
+begins, so the reading that mattered was often not one the tracker was watching.
+0.2.0 latches zero health instead. **If a death fails to register, that is a
+regression and I want the log line.**
 
 A run is never failed automatically, by design; it keeps counting.
 
-### 4.7 — Approach vs. boss *(expected to fail)*
+### 4.7 — Fall damage *(the new heuristic — this is the one to watch)*
 
-Under **All Bosses**, the active split shows Approach and Boss hit boxes. **Every
-hit will land in Approach**, even during a boss fight.
+Select **No Hit**. Then, deliberately:
 
-This is known, not a bug to report: nothing sets the boss-fight flag yet, because
-the memory offset for boss health has not been found. It is the last significant
-piece of unbuilt work.
+1. **Take a fall that hurts** — off a ledge you know you survive. The hit count
+   should **not** move. The **damage** count under No Damage would have.
+2. **Take an ordinary hit on level ground.** The hit count **should** move.
+3. Open **Fall damage → Recent damage** on the control page. Each event shows
+   the drop measured and the call made. That list is the actual test — the
+   counters only show the result.
+
+Then play a normal segment of your route and read the list back. What matters is
+whether any *real* hit was written off as a fall, which is the failure that
+quietly flatters a run.
+
+If it is misjudging: raise **Drop of at least**, or shorten **Within**. If it is
+hopeless on your route, turn it off — No Hit then counts what No Damage counts,
+which is honest rather than wrong.
+
+*Why it matters: the detector measures player height, not what dealt the damage.
+The game does record the latter, through a pointer chain that has not been found.
+Until it is, this is a guess with its working shown.*
+
+### 4.8 — Approach vs. boss *(still blocked)*
+
+Both segments are still recorded, and every hit still lands in Approach even
+during a boss fight, because nothing sets the boss-fight flag — the memory offset
+for boss health has not been found. As of 0.2.0 the breakdown is no longer
+displayed, so there is nothing to check here; it returns when the offset does.
 
 ---
 

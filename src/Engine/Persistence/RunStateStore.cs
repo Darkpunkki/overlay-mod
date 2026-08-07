@@ -19,6 +19,9 @@ public sealed class RunStateStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() },
+        // Legacy aliases are nulled out once folded in; writing them back as
+        // explicit nulls would put fields into the file that mean nothing.
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     private readonly string _path;
@@ -29,9 +32,17 @@ public sealed class RunStateStore
     {
         try
         {
-            return File.Exists(_path)
-                ? JsonSerializer.Deserialize<RunState>(File.ReadAllText(_path), Json)
-                : null;
+            if (!File.Exists(_path)) return null;
+
+            var state = JsonSerializer.Deserialize<RunState>(File.ReadAllText(_path), Json);
+            if (state is null) return null;
+
+            // A run parked by an older version counts its damage under a name
+            // this one no longer reads. Fold it forward rather than resuming an
+            // attempt with its hits quietly reset to zero.
+            var splits = new List<SplitState>(state.Splits.Count);
+            foreach (var s in state.Splits) splits.Add(s.Migrated());
+            return state with { Splits = splits };
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {

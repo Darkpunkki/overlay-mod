@@ -57,6 +57,7 @@ public class RouteSelectionTests : IDisposable
         new RunStateStore(Path.Combine(_dir, "run-state.json")),
         new RouteStore(RoutesDir),
         new SettingsStore(Path.Combine(_dir, "settings.json")),
+        new TrackingSettingsStore(Path.Combine(_dir, "tracking.json")),
         NullLogger<RunController>.Instance);
 
     // --- the store ---
@@ -162,6 +163,63 @@ public class RouteSelectionTests : IDisposable
         Assert.Equal(before, new RouteStore(RoutesDir).All.Count);
     }
 
+    // --- challenge names written by 0.1.0 ---
+
+    [Fact]
+    public void ARouteNamingARemovedChallengeStillLoads()
+    {
+        // Any% and All Bosses were removed in 0.2.0, and every install that
+        // predates it has route files naming one. A strict parse does not fall
+        // back to a default here - it throws, and RouteStore skips the whole
+        // file, silently removing the route from the picker.
+        Directory.CreateDirectory(RoutesDir);
+        File.WriteAllText(Path.Combine(RoutesDir, "legacy.json"), """
+            {
+              "name": "Legacy All Bosses",
+              "defaultChallenge": "AllBosses",
+              "splits": [ { "name": "Iudex Gundyr", "isBoss": true, "defeatFlagId": 14000800 } ]
+            }
+            """);
+
+        var route = new RouteStore(RoutesDir).Find("Legacy All Bosses");
+
+        Assert.NotNull(route);
+        Assert.Equal(ChallengeType.Speedrun, route!.DefaultChallenge);
+    }
+
+    [Fact]
+    public void ARouteNamingAnUnrecognisableChallengeFallsBackRatherThanVanishing()
+    {
+        Directory.CreateDirectory(RoutesDir);
+        File.WriteAllText(Path.Combine(RoutesDir, "typo.json"), """
+            {
+              "name": "Typo Route",
+              "defaultChallenge": "no-such-challenge",
+              "splits": [ { "name": "Iudex Gundyr", "isBoss": true, "defeatFlagId": 14000800 } ]
+            }
+            """);
+
+        var route = new RouteStore(RoutesDir).Find("Typo Route");
+
+        Assert.NotNull(route);
+        Assert.Equal(ChallengeType.NoDamage, route!.DefaultChallenge);
+    }
+
+    [Fact]
+    public void ARememberedSelectionNamingARemovedChallengeIsNotLost()
+    {
+        Directory.CreateDirectory(_dir);
+        new RouteStore(RoutesDir);
+        File.WriteAllText(Path.Combine(_dir, "settings.json"),
+            $$"""{ "routeName": "{{BuiltInRoutes.Quick.Name}}", "challenge": "AnyPercent" }""");
+
+        var state = NewController().Project(GameSnapshot.Detached);
+
+        // The route survives, and the challenge lands on what Any% was ranked by.
+        Assert.Equal(BuiltInRoutes.Quick.Name, state.RouteName);
+        Assert.Equal("Speedrun", state.ProfileName);
+    }
+
     [Fact]
     public void EveryBuiltInSplitCanAutoAdvance()
     {
@@ -207,7 +265,7 @@ public class RouteSelectionTests : IDisposable
 
         var state = c.Project(GameSnapshot.Detached);
         Assert.Equal(BuiltInRoutes.AllBosses.Name, state.RouteName);
-        Assert.Equal("No-Hit", state.ProfileName);
+        Assert.Equal("No Hit", state.ProfileName);
     }
 
     [Fact]
@@ -225,26 +283,31 @@ public class RouteSelectionTests : IDisposable
     {
         var c = NewController();
 
+        // No Damage and No Hit rank on different counters, so they must not
+        // report the same split metric - that difference is the whole point.
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoDamage);
+        var noDamage = c.Project(GameSnapshot.Detached).Display;
+        Assert.Equal("Damage", noDamage.SplitMetric);
+        Assert.True(noDamage.ShowTotals);
+
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
-        var noHit = c.Project(GameSnapshot.Detached).Display;
-        Assert.Equal("Hits", noHit.SplitMetric);
-        Assert.False(noHit.ShowDeaths);
-        Assert.False(noHit.ShowSegmentBreakdown);
+        Assert.Equal("Hits", c.Project(GameSnapshot.Detached).Display.SplitMetric);
 
         // Deathless ranks by deaths, so that is what each split must show -
         // showing hits there would compare the wrong thing entirely.
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.Deathless);
         Assert.Equal("Deaths", c.Project(GameSnapshot.Detached).Display.SplitMetric);
 
-        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.AllBosses);
-        var allBosses = c.Project(GameSnapshot.Detached).Display;
-        Assert.Equal("Time", allBosses.SplitMetric);
-        Assert.True(allBosses.ShowDeaths);
-        Assert.True(allBosses.ShowSegmentBreakdown);
+        // Speedrun drops the totals footer: its primary metric is the run
+        // timer, which the overlay already shows far larger at the top.
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.Speedrun);
+        var speedrun = c.Project(GameSnapshot.Detached).Display;
+        Assert.Equal("Time", speedrun.SplitMetric);
+        Assert.False(speedrun.ShowTotals);
     }
 
     [Fact]
-    public void EverySplitCarriesAllThreePersonalBestsRegardlessOfProfile()
+    public void EverySplitCarriesEveryPersonalBestRegardlessOfProfile()
     {
         var c = NewController();
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
@@ -253,6 +316,7 @@ public class RouteSelectionTests : IDisposable
         // The payload shape must not change with the profile, so switching
         // challenge never needs a different client.
         var split = c.Project(Play(600_000, 1000)).Splits[0];
+        Assert.Null(split.PbDamage);
         Assert.Null(split.PbHits);
         Assert.Null(split.PbDeaths);
         Assert.Null(split.PbIgtMs);
@@ -267,7 +331,7 @@ public class RouteSelectionTests : IDisposable
         c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
         Settle(c, Play(600_000, 1000), flags);
         c.Tick(Play(601_000, 900), flags, 0);      // a hit on the old route
-        Assert.Equal(1, c.Project(Play(601_000, 900)).TotalHits);
+        Assert.Equal(1, c.Project(Play(601_000, 900)).TotalDamage);
 
         c.Select(BuiltInRoutes.AllBosses.Name, ChallengeType.NoHit);
 
@@ -287,9 +351,9 @@ public class RouteSelectionTests : IDisposable
         c.Tick(Play(601_000, 900), flags, 0);
 
         // The thing being measured changed, so the numbers so far mean nothing.
-        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.AnyPercent);
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.Speedrun);
 
-        Assert.Equal(0, c.Project(GameSnapshot.Detached).TotalHits);
+        Assert.Equal(0, c.Project(GameSnapshot.Detached).TotalDamage);
     }
 
     [Fact]

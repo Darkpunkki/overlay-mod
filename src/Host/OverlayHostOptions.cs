@@ -39,6 +39,9 @@ public sealed class OverlayHostOptions
 
     public string AppearancePath => Path.Combine(DataDirectory, "appearance.json");
 
+    /// <summary>Fall-damage thresholds and anything else about how damage is classified.</summary>
+    public string TrackingPath => Path.Combine(DataDirectory, "tracking.json");
+
     public string LogPath => Path.Combine(DataDirectory, "overlaymod.log");
 
     /// <summary>Run without the notification-area icon.</summary>

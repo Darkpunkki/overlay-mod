@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace OverlayMod.Engine.Persistence;
 
@@ -9,18 +10,30 @@ namespace OverlayMod.Engine.Persistence;
 ///
 /// Two kinds of best are stored, because they mean different things:
 ///
-///  - **Whole-run bests** (total hits, deaths, time) are folded from finished
+///  - **Whole-run bests** (damage, hits, deaths, time) are folded from finished
 ///    runs only. A total from an abandoned attempt is not comparable.
 ///  - **Per-split bests** are stored in their own right and updated the moment a
 ///    split completes, whether or not the run is ever finished. Most attempts
 ///    end early, so requiring a completed run would throw away nearly every
 ///    boss result a player ever produces.
+///
+/// **Schema 2 (0.2.0)** split "hits" into damage and hits. See <see cref="Migrate"/>.
 /// </summary>
 public sealed class JsonRecordStore : IRecordStore
 {
+    /// <summary>
+    /// Bumped when the meaning of a stored field changes. Version 1 (implicit —
+    /// the field did not exist) recorded one counter called "hits" that included
+    /// fall damage.
+    /// </summary>
+    private const int CurrentSchema = 2;
+
     private sealed record FileShape(
         List<RunRecord> Runs,
-        Dictionary<string, Dictionary<string, SplitRecord>>? SplitBests);
+        Dictionary<string, Dictionary<string, SplitRecord>>? SplitBests)
+    {
+        public int Schema { get; init; }
+    }
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -29,6 +42,8 @@ public sealed class JsonRecordStore : IRecordStore
         // Route and split names are user-facing text; keep them readable rather
         // than escaped into \uXXXX in a file people may open.
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        // A best that has never been set is absent, not null.
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     private readonly string _path;
@@ -41,9 +56,9 @@ public sealed class JsonRecordStore : IRecordStore
     /// <summary>Best result per split, per route, from any attempt that got there.</summary>
     private readonly Dictionary<string, Dictionary<string, SplitRecord>> _splitBests = new(StringComparer.Ordinal);
 
-    private sealed record RunBest(int? IgtMs, int? Hits, int? Deaths)
+    private sealed record RunBest(int? IgtMs, int? Damage, int? Hits, int? Deaths)
     {
-        public static readonly RunBest None = new(null, null, null);
+        public static readonly RunBest None = new(null, null, null, null);
     }
 
     public JsonRecordStore(string path)
@@ -59,18 +74,20 @@ public sealed class JsonRecordStore : IRecordStore
             var run = _runBests.TryGetValue(routeName, out var r) ? r : RunBest.None;
             var splits = _splitBests.TryGetValue(routeName, out var s) ? s : new Dictionary<string, SplitRecord>();
 
+            var damage = new Dictionary<string, int>(splits.Count);
             var hits = new Dictionary<string, int>(splits.Count);
             var deaths = new Dictionary<string, int>(splits.Count);
             var times = new Dictionary<string, int>(splits.Count);
 
             foreach (var (name, best) in splits)
             {
-                hits[name] = best.Hits;
+                damage[name] = best.Damage;
+                if (best.Hits is { } h) hits[name] = h;
                 deaths[name] = best.Deaths;
                 if (best.IgtMs > 0) times[name] = best.IgtMs;
             }
 
-            return new PersonalBests(run.IgtMs, run.Hits, run.Deaths, hits, deaths, times);
+            return new PersonalBests(run.IgtMs, run.Damage, run.Hits, run.Deaths, damage, hits, deaths, times);
         }
     }
 
@@ -79,12 +96,7 @@ public sealed class JsonRecordStore : IRecordStore
         lock (_gate)
         {
             _runs.Add(run);
-
-            var previous = _runBests.TryGetValue(run.RouteName, out var b) ? b : RunBest.None;
-            _runBests[run.RouteName] = new RunBest(
-                Min(previous.IgtMs, run.RunIgtMs > 0 ? run.RunIgtMs : null),
-                Min(previous.Hits, run.TotalHits),
-                Min(previous.Deaths, run.TotalDeaths));
+            FoldRun(run);
 
             // Folding these again is harmless: each is a minimum, so a split
             // already recorded when it completed simply stays where it is.
@@ -101,6 +113,16 @@ public sealed class JsonRecordStore : IRecordStore
             if (!FoldSplit(routeName, split)) return;
             Save();
         }
+    }
+
+    private void FoldRun(RunRecord run)
+    {
+        var previous = _runBests.TryGetValue(run.RouteName, out var b) ? b : RunBest.None;
+        _runBests[run.RouteName] = new RunBest(
+            Min(previous.IgtMs, run.RunIgtMs > 0 ? run.RunIgtMs : null),
+            Min(previous.Damage, run.TotalDamage),
+            Min(previous.Hits, run.TotalHits),
+            Min(previous.Deaths, run.TotalDeaths));
     }
 
     /// <summary>Merge one split result into the bests. Returns true if anything changed.</summary>
@@ -123,8 +145,13 @@ public sealed class JsonRecordStore : IRecordStore
         var merged = new SplitRecord(
             split.Name,
             igt,
-            Math.Min(current.Hits, split.Hits),
-            Math.Min(current.Deaths, split.Deaths));
+            Math.Min(current.Damage, split.Damage),
+            Math.Min(current.Deaths, split.Deaths))
+        {
+            // Null means "never measured", which must not win a minimum against
+            // a real result — nor be overwritten by one.
+            Hits = Min(current.Hits, split.Hits),
+        };
 
         if (merged == current) return false;
 
@@ -133,6 +160,29 @@ public sealed class JsonRecordStore : IRecordStore
     }
 
     private static int? Min(int? a, int? b) => a is null ? b : b is null ? a : Math.Min(a.Value, b.Value);
+
+    /// <summary>
+    /// Bring a file written before 0.2.0 forward.
+    ///
+    /// That version had one counter, called hits, which went up on every drop in
+    /// health — fall damage included. That is precisely what damage means now, so
+    /// the old numbers move across intact and become No Damage bests. The hit
+    /// count is left null rather than copied: nothing in an old file records
+    /// whether a given hit was the ground, so a No Hit best cannot be recovered
+    /// from it and inventing one would put an unbeatable target on screen.
+    /// </summary>
+    private static RunRecord Migrate(RunRecord run) => run with
+    {
+        TotalDamage = run.TotalDamage > 0 ? run.TotalDamage : run.TotalHits ?? 0,
+        TotalHits = null,
+        Splits = run.Splits.Select(Migrate).ToList(),
+    };
+
+    private static SplitRecord Migrate(SplitRecord split) => split with
+    {
+        Damage = split.Damage > 0 ? split.Damage : split.Hits ?? 0,
+        Hits = null,
+    };
 
     private void Load()
     {
@@ -143,24 +193,19 @@ public sealed class JsonRecordStore : IRecordStore
             var parsed = JsonSerializer.Deserialize<FileShape>(File.ReadAllText(_path), Json);
             if (parsed is null) return;
 
+            var legacy = parsed.Schema < CurrentSchema;
+
             if (parsed.Runs is not null)
             {
-                _runs.AddRange(parsed.Runs);
-                foreach (var run in _runs)
-                {
-                    var previous = _runBests.TryGetValue(run.RouteName, out var b) ? b : RunBest.None;
-                    _runBests[run.RouteName] = new RunBest(
-                        Min(previous.IgtMs, run.RunIgtMs > 0 ? run.RunIgtMs : null),
-                        Min(previous.Hits, run.TotalHits),
-                        Min(previous.Deaths, run.TotalDeaths));
-                }
+                foreach (var run in parsed.Runs) _runs.Add(legacy ? Migrate(run) : run);
+                foreach (var run in _runs) FoldRun(run);
             }
 
             if (parsed.SplitBests is not null)
             {
                 foreach (var (route, splits) in parsed.SplitBests)
                 foreach (var (_, split) in splits)
-                    FoldSplit(route, split);
+                    FoldSplit(route, legacy ? Migrate(split) : split);
             }
             else
             {
@@ -170,6 +215,8 @@ public sealed class JsonRecordStore : IRecordStore
                 foreach (var split in run.Splits)
                     FoldSplit(run.RouteName, split);
             }
+
+            if (legacy) Save();
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -191,7 +238,8 @@ public sealed class JsonRecordStore : IRecordStore
             // Write beside the target and swap, so an interrupted write cannot
             // leave a half-written history behind.
             var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(new FileShape(_runs, _splitBests), Json));
+            var shape = new FileShape(_runs, _splitBests) { Schema = CurrentSchema };
+            File.WriteAllText(temp, JsonSerializer.Serialize(shape, Json));
             File.Move(temp, _path, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

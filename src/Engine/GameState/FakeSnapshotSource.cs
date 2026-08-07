@@ -13,7 +13,8 @@ public sealed record FakeKeyframe(
     bool? PlayerLoaded = null,
     bool? IsLoading = null,
     bool? BossFightActive = null,
-    uint? SetFlag = null);
+    uint? SetFlag = null,
+    float? Y = null);
 
 /// <summary>
 /// Replays a scripted run with no game attached, so the server and overlay can
@@ -80,6 +81,7 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
         var loaded = false;
         var loading = false;
         var boss = false;
+        var y = 0f;
 
         foreach (var k in _script)
         {
@@ -88,6 +90,7 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
             if (k.PlayerLoaded is { } l) loaded = l;
             if (k.IsLoading is { } ld) loading = ld;
             if (k.BossFightActive is { } b) boss = b;
+            if (k.Y is { } height) y = height;
         }
 
         return new GameSnapshot
@@ -100,7 +103,7 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
             MaxHp = loaded ? _maxHp : 0,
             BossFightActive = boss,
             X = 0,
-            Y = 0,
+            Y = y,
             Z = 0,
         };
     }
@@ -153,9 +156,12 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
     /// A ~100 second scripted run over three boss splits, exercising everything
     /// the tracker and overlay need to display: loading screens, approach damage,
     /// estus heals, the approach-to-boss transition, a death and reload mid-run,
-    /// a retry, and boss-defeat flags driving auto-splits through to a finish.
+    /// a retry, a fall that costs health, and boss-defeat flags driving
+    /// auto-splits through to a finish.
     ///
-    /// Expected totals for one pass: 9 hits, 1 death, all three splits completed.
+    /// Expected totals for one pass: 10 damage, of which 1 is a fall — so 9 hits —
+    /// 1 death, and all three splits completed. The fall is what makes the
+    /// difference between No Damage and No Hit visible without the game.
     /// </summary>
     public static readonly IReadOnlyList<FakeKeyframe> DemoRun = new[]
     {
@@ -184,8 +190,10 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
         new FakeKeyframe(72_000, Hp: 700),                       // hit
         new FakeKeyframe(77_000, SetFlag: 13000800),             // defeated -> auto-split
 
-        // Split 3 - Curse-rotted Greatwood, cleanly.
+        // Split 3 - Curse-rotted Greatwood, by way of a drop down a shaft.
         new FakeKeyframe(78_000, BossFightActive: false),
+        new FakeKeyframe(80_000, Y: 14),                         // up on a ledge
+        new FakeKeyframe(82_000, Hp: 600, Y: 0),                 // landed hard -> fall damage, not a hit
         new FakeKeyframe(84_000, Hp: 520),                       // hit
         new FakeKeyframe(90_000, BossFightActive: true),
         new FakeKeyframe(95_000, Hp: 310),                       // hit

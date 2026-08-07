@@ -12,40 +12,22 @@
     <header class="run">
       <div class="run__timer" id="runTimer">0:00.000</div>
       <div class="run__meta">
-        <span class="run__route" id="routeName">&mdash;</span>
+        <!-- The route name used to sit here. It is chosen once and never
+             changes mid-run, so on screen it was a label nobody read. -->
         <span class="run__profile" id="profileName"></span>
+        <!-- The whole-run best. Shown for challenges with no totals footer,
+             which would otherwise repeat the timer directly above it. -->
+        <span class="run__pb" id="runPb" hidden></span>
       </div>
     </header>
 
     <ol class="splits" id="splits"></ol>
 
-    <!-- Approach/boss breakdown. Hidden unless the profile asks for it; a
-         No-Hit run wants one combined number per boss. -->
-    <section class="active" id="active" hidden>
-      <div class="active__name" id="activeName"></div>
-      <div class="active__segments">
-        <div class="seg seg--approach">
-          <span class="seg__label">Approach</span>
-          <span class="seg__value" id="approachHits">0</span>
-        </div>
-        <div class="seg seg--boss">
-          <span class="seg__label">Boss</span>
-          <span class="seg__value" id="bossHits">0</span>
-        </div>
-      </div>
-    </section>
-
-    <footer class="totals">
+    <footer class="totals" id="totals">
       <div class="total total--primary">
-        <span class="total__label" id="primaryLabel">Hits</span>
+        <span class="total__label" id="primaryLabel">Damage</span>
         <span class="total__value" id="primaryValue">0</span>
         <span class="total__pb" id="primaryPb"></span>
-      </div>
-      <!-- Deaths are shown only for profiles that treat them as a statistic.
-           In a No-Hit run a death is a failed run, not a number to watch. -->
-      <div class="total total--deaths" id="deathsTotal" hidden>
-        <span class="total__label">Deaths</span>
-        <span class="total__value" id="totalDeaths">0</span>
       </div>
     </footer>
 

@@ -59,8 +59,9 @@ public class AppearanceSettingsTests
     }
 
     [Theory]
-    [InlineData(0, 3)]
-    [InlineData(500, 20)]
+    [InlineData(0, 1)]      // one row is a legitimate minimal overlay
+    [InlineData(500, 30)]   // enough for a whole All Bosses route at once
+    [InlineData(25, 25)]
     public void VisibleSplitsIsClamped(int given, int expected)
     {
         Assert.Equal(expected, (AppearanceSettings.Default with { VisibleSplits = given }).Sanitised().VisibleSplits);

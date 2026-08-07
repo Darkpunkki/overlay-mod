@@ -46,6 +46,7 @@ public sealed class RunController
     private readonly RunStateStore _parked;
     private readonly RouteStore _routes;
     private readonly SettingsStore _settings;
+    private readonly TrackingSettingsStore _tracking;
     private readonly ILogger<RunController> _log;
 
     private RouteFile _routeFile;
@@ -63,22 +64,24 @@ public sealed class RunController
 
     /// <summary>
     /// The parts of a run whose change must be checkpointed immediately rather
-    /// than waiting for the timer. Losing a hit to a crash would corrupt exactly
-    /// the number a No-Hit run is judged on.
+    /// than waiting for the timer. Losing one to a crash would corrupt exactly
+    /// the number the run is judged on.
     /// </summary>
-    private (int Index, int Hits, int Deaths, RunPhase Phase) _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
+    private (int Index, int Damage, int Deaths, RunPhase Phase) _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
 
     public RunController(
         IRecordStore records,
         RunStateStore parked,
         RouteStore routes,
         SettingsStore settings,
+        TrackingSettingsStore tracking,
         ILogger<RunController> log)
     {
         _records = records;
         _parked = parked;
         _routes = routes;
         _settings = settings;
+        _tracking = tracking;
         _log = log;
 
         // Restore the last route and challenge chosen. If that route has since
@@ -104,6 +107,16 @@ public sealed class RunController
     public (RouteFile Route, ChallengeProfile Profile) Current
     {
         get { lock (_gate) return (_routeFile, _profile); }
+    }
+
+    /// <summary>
+    /// The most recent damage events, newest first, with the descent that decided
+    /// whether each was a fall. This is how the fall thresholds get tuned: take a
+    /// run, then read back what the detector actually called.
+    /// </summary>
+    public IReadOnlyList<DamageEvent> RecentDamage
+    {
+        get { lock (_gate) return _tracker.RecentDamage.Reverse().ToList(); }
     }
 
     /// <summary>
@@ -155,6 +168,11 @@ public sealed class RunController
     {
         lock (_gate)
         {
+            // Picked up every tick rather than at construction, so editing the
+            // fall thresholds on the control page takes effect on the run in
+            // progress — which is the only run anyone is ever tuning against.
+            _tracker.FallOptions = _tracking.FallDamage;
+
             // A fresh source generation - a re-attach, or the fake script looping -
             // means the timeline restarted. That is not automatically a new run,
             // so re-run the resume check rather than assuming either way.
@@ -274,7 +292,7 @@ public sealed class RunController
         for (var i = fromIndex; i < to; i++)
         {
             var s = _tracker.Splits[i];
-            _records.RecordSplit(_route.Name, new SplitRecord(s.Name, s.IgtMs, s.Hits, s.Deaths));
+            _records.RecordSplit(_route.Name, new SplitRecord(s.Name, s.IgtMs, s.Damage, s.Deaths) { Hits = s.Hits });
         }
 
         _bests = _records.BestsFor(_route.Name);
@@ -284,23 +302,24 @@ public sealed class RunController
     {
         var splits = new List<SplitRecord>(_tracker.Splits.Count);
         foreach (var s in _tracker.Splits)
-            splits.Add(new SplitRecord(s.Name, s.IgtMs, s.Hits, s.Deaths));
+            splits.Add(new SplitRecord(s.Name, s.IgtMs, s.Damage, s.Deaths) { Hits = s.Hits });
 
         _records.Record(new RunRecord(
             _route.Name,
             _route.Profile.Name,
             DateTimeOffset.Now,
             _tracker.RunIgtMs,
-            _tracker.TotalHits,
+            _tracker.TotalDamage,
             _tracker.TotalDeaths,
-            splits));
+            splits)
+        { TotalHits = _tracker.TotalHits });
 
         _bests = _records.BestsFor(_route.Name);
         _parked.Clear();
 
         _log.LogInformation(
-            "Run finished: {Hits} hits, {Deaths} deaths, {Time}ms.",
-            _tracker.TotalHits, _tracker.TotalDeaths, _tracker.RunIgtMs);
+            "Run finished: {Damage} damage ({Falls} from falls), {Deaths} deaths, {Time}ms.",
+            _tracker.TotalDamage, _tracker.TotalFallDamage, _tracker.TotalDeaths, _tracker.RunIgtMs);
     }
 
     /// <summary>
@@ -312,7 +331,7 @@ public sealed class RunController
     {
         if (_tracker.Capture() is not { } state) return;
 
-        var key = (state.ActiveIndex, _tracker.TotalHits, _tracker.TotalDeaths, state.Phase);
+        var key = (state.ActiveIndex, _tracker.TotalDamage, _tracker.TotalDeaths, state.Phase);
         var changed = key != _lastCheckpointKey;
         if (!force && !changed && DateTime.UtcNow - _lastCheckpoint < CheckpointInterval) return;
 

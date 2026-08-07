@@ -32,6 +32,7 @@ builder.Services.AddSingleton<IRecordStore>(_ => new JsonRecordStore(options.Rec
 builder.Services.AddSingleton(_ => new RunStateStore(options.RunStatePath));
 builder.Services.AddSingleton(_ => new RouteStore(options.RoutesDirectory));
 builder.Services.AddSingleton(_ => new SettingsStore(options.SettingsPath));
+builder.Services.AddSingleton(_ => new TrackingSettingsStore(options.TrackingPath));
 builder.Services.AddSingleton(_ => new AppearanceStore(options.AppearancePath));
 builder.Services.AddSingleton<RunController>();
 builder.Services.AddSingleton<StateBroadcaster>();
@@ -218,6 +219,44 @@ app.MapPost("/api/appearance/reset", (AppearanceStore store) =>
     return Results.Ok(new { version = store.Version, settings = applied });
 });
 
+// How damage is classified. Fall detection is a heuristic over player height, so
+// its thresholds are settings rather than constants — the only way to know
+// whether they are right is to watch them against a real playthrough.
+app.MapGet("/api/tracking", (TrackingSettingsStore store) =>
+    Results.Ok(new { fallDamage = store.FallDamage }));
+
+app.MapPost("/api/tracking", (FallDamageOptions fallDamage, TrackingSettingsStore store) =>
+    Results.Ok(new { fallDamage = store.Update(fallDamage) }));
+
+app.MapPost("/api/tracking/reset", (TrackingSettingsStore store) =>
+    Results.Ok(new { fallDamage = store.Reset() }));
+
+// The recent damage events with the descent measured for each, so the fall
+// detector's calls can be reviewed rather than taken on trust. This is the
+// counterpart to the thresholds above: change one, play, read this back.
+app.MapGet("/api/hits", (RunController rc) => Results.Ok(new
+{
+    events = rc.RecentDamage.Select(e => new
+    {
+        igtMs = e.IgtMs,
+        split = e.SplitName,
+        hp = e.Hp,
+        maxHp = e.MaxHp,
+        fatal = e.Fatal,
+        descentMetres = e.DescentMetres,
+        countedAsFall = e.CountedAsFall,
+    }),
+}));
+
+// Which build this is. A log without a version number turns every bug report
+// into a round trip.
+app.MapGet("/api/about", (ISnapshotSource source) => Results.Ok(new
+{
+    version = OverlayMod.Host.BuildInfo.Version,
+    source = source.Description,
+    dataDirectory = Path.GetFullPath(options.DataDirectory),
+}));
+
 // Shut the host down. The tray icon can do this too, but it hides behind the
 // notification-area overflow arrow, and a windowed process ignores Ctrl+C — so
 // without this the only way out is Task Manager.
@@ -244,7 +283,7 @@ var selected = app.Services.GetRequiredService<RunController>().Current;
 
 var banner = $"""
 
-    OverlayMod host
+    OverlayMod {BuildInfo.Version}
       source   : {source.Description}
       running  : {selected.Route.Name} as {selected.Profile.Name}
                  ({selected.Route.AutoSplitCount}/{selected.Route.Splits.Count} splits auto-advance)

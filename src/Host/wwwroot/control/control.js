@@ -10,7 +10,9 @@
   const el = (id) => document.getElementById(id);
 
   const dom = {
+    version: el("version"),
     challenges: el("challenges"),
+    challengeNote: el("challengeNote"),
     routes: el("routes"),
     reload: el("reload"),
     restore: el("restore"),
@@ -23,6 +25,7 @@
     factSplit: el("factSplit"),
     overlayUrl: el("overlayUrl"),
     hotkeys: el("hotkeys"),
+    fdEvents: el("fdEvents"),
     quit: el("quit"),
     toast: el("toast"),
   };
@@ -30,16 +33,48 @@
   let catalogue = null;
   let toastTimer = 0;
 
+  // What each challenge actually measures. Four names on four buttons do not
+  // explain themselves, and the difference between the first two is the whole
+  // point of this release.
+  const CHALLENGE_NOTES = {
+    NoDamage: "Counts every drop in health, fall damage included. Nothing is guessed at.",
+    NoHit: "Counts damage the game dealt you. Landing damage is excluded — see Fall damage below.",
+    Deathless: "Counts deaths. Damage is still recorded underneath, it just is not shown.",
+    Speedrun: "Ranked on time. No hit counter at all: the run clock, and each split against its best.",
+  };
+
+  // --- collapsible sections ---
+  //
+  // Which parts of this page matter depends on whether you are setting up or
+  // mid-session, so the state is remembered rather than reset on every visit.
+
+  const SECTIONS_KEY = "overlaymod.sections";
+
+  function restoreSections() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? "{}"); } catch { /* defaults */ }
+
+    for (const card of document.querySelectorAll("details.card")) {
+      if (typeof saved[card.id] === "boolean") card.open = saved[card.id];
+
+      card.addEventListener("toggle", () => {
+        saved[card.id] = card.open;
+        try { localStorage.setItem(SECTIONS_KEY, JSON.stringify(saved)); } catch { /* private mode */ }
+        if (card.id === "cardFall" && card.open) loadDamageEvents();
+      });
+    }
+  }
+
   // --- appearance ---
   //
   // Each control maps to one field. Sliders carry a formatter for their readout;
-  // colours need none. Wiring them from a table keeps adding a setting to one
-  // line here rather than a block of near-identical handlers.
+  // colours and the split count need none. Wiring them from a table keeps adding
+  // a setting to one line here rather than a block of near-identical handlers.
   const APPEARANCE = [
     { key: "scale", input: "apScale", out: "apScaleOut", number: true, format: (v) => `${(+v).toFixed(2)}×` },
     { key: "plateOpacity", input: "apPlateOpacity", out: "apPlateOpacityOut", number: true, format: (v) => `${Math.round(v * 100)}%` },
     { key: "shadowStrength", input: "apShadow", out: "apShadowOut", number: true, format: (v) => `${Math.round(v * 100)}%` },
-    { key: "visibleSplits", input: "apSplits", out: "apSplitsOut", number: true, format: (v) => `${v}` },
+    { key: "visibleSplits", input: "apSplits", number: true, integer: true },
     { key: "accent", input: "apAccent" },
     { key: "text", input: "apText" },
     { key: "dim", input: "apDim" },
@@ -48,8 +83,17 @@
     { key: "plate", input: "apPlate" },
   ];
 
+  // Fall-damage thresholds. Same shape, different endpoint.
+  const FALL = [
+    { key: "enabled", input: "fdEnabled", boolean: true },
+    { key: "descentMetres", input: "fdDescent", out: "fdDescentOut", number: true, format: (v) => `${(+v).toFixed(1)} m` },
+    { key: "windowMs", input: "fdWindow", out: "fdWindowOut", number: true, integer: true, format: (v) => `${Math.round(v)} ms` },
+  ];
+
   let appearance = null;
   let appearanceTimer = 0;
+  let fallDamage = null;
+  let fallTimer = 0;
 
   function toast(message) {
     dom.toast.textContent = message;
@@ -133,6 +177,8 @@
         onPick: () => select(selected.route, c.type),
       })));
 
+    dom.challengeNote.textContent = CHALLENGE_NOTES[selected.challenge] ?? "";
+
     dom.routes.replaceChildren(...routes.map((r) => {
       const manual = r.splits - r.autoSplits;
       return choice({
@@ -151,6 +197,11 @@
   async function loadCatalogue() {
     catalogue = await (await fetch("/api/routes")).json();
     render();
+  }
+
+  async function loadAbout() {
+    const { version } = await (await fetch("/api/about")).json();
+    dom.version.textContent = `v${version}`;
   }
 
   async function loadHotkeys() {
@@ -183,35 +234,63 @@
     }));
   }
 
-  // --- appearance editing ---
+  // --- settings editing, shared by appearance and fall damage ---
 
-  function showAppearance(settings) {
-    appearance = settings;
+  function readInput(field, input) {
+    if (field.boolean) return input.checked;
+    if (!field.number) return input.value;
 
-    for (const f of APPEARANCE) {
+    const value = Number.parseFloat(input.value);
+    if (!Number.isFinite(value)) return null; // mid-edit, or emptied
+    return field.integer ? Math.round(value) : value;
+  }
+
+  function show(fields, settings) {
+    for (const f of fields) {
       const input = el(f.input);
       if (!input) continue;
-      input.value = settings[f.key];
+
+      if (f.boolean) input.checked = !!settings[f.key];
+      else input.value = settings[f.key];
+
       if (f.out && f.format) el(f.out).textContent = f.format(settings[f.key]);
     }
   }
 
   // Dragging a slider fires continuously; saving on every event would mean a
   // request per pixel. Show the change at once, persist once it settles.
-  function onAppearanceInput(field, raw) {
-    const value = field.number ? Number.parseFloat(raw) : raw;
-    appearance = { ...appearance, [field.key]: field.key === "visibleSplits" ? Math.round(value) : value };
+  function onEdit(field, input, current, apply, schedule) {
+    const base = current();
+    const value = readInput(field, input);
+    if (base === null || value === null) return; // not loaded yet, or mid-edit
 
+    apply({ ...base, [field.key]: value });
     if (field.out && field.format) el(field.out).textContent = field.format(value);
+    schedule();
+  }
 
-    clearTimeout(appearanceTimer);
-    appearanceTimer = setTimeout(saveAppearance, 150);
+  // The server clamps what it is sent. Reflect anything it changed, so a field
+  // can never show a value that is not the one in effect — but leave whatever
+  // is being typed in alone until it is committed.
+  function reconcile(fields, sent, applied) {
+    for (const f of fields) {
+      if (applied[f.key] === sent[f.key]) continue;
+
+      const input = el(f.input);
+      if (input && document.activeElement !== input) {
+        if (f.boolean) input.checked = !!applied[f.key];
+        else input.value = applied[f.key];
+      }
+      if (f.out && f.format) el(f.out).textContent = f.format(applied[f.key]);
+    }
   }
 
   async function saveAppearance() {
+    const sent = appearance;
     try {
-      const { settings } = await post("/api/appearance", appearance);
+      const { settings } = await post("/api/appearance", sent);
       appearance = settings;
+      reconcile(APPEARANCE, sent, settings);
     } catch (err) {
       toast(`Could not save appearance: ${err.message}`);
     }
@@ -219,23 +298,127 @@
 
   async function loadAppearance() {
     const { settings } = await (await fetch("/api/appearance")).json();
-    showAppearance(settings);
+    appearance = settings;
+    show(APPEARANCE, settings);
+  }
+
+  async function saveFallDamage() {
+    const sent = fallDamage;
+    try {
+      const { fallDamage: applied } = await post("/api/tracking", sent);
+      fallDamage = applied;
+      reconcile(FALL, sent, applied);
+    } catch (err) {
+      toast(`Could not save fall settings: ${err.message}`);
+    }
+  }
+
+  async function loadFallDamage() {
+    const { fallDamage: settings } = await (await fetch("/api/tracking")).json();
+    fallDamage = settings;
+    show(FALL, settings);
   }
 
   for (const field of APPEARANCE) {
     const input = el(field.input);
-    if (input) input.addEventListener("input", () => onAppearanceInput(field, input.value));
+    if (!input) continue;
+    input.addEventListener("input", () => {
+      onEdit(field, input,
+        () => appearance, (next) => { appearance = next; },
+        () => { clearTimeout(appearanceTimer); appearanceTimer = setTimeout(saveAppearance, 150); });
+    });
+  }
+
+  for (const field of FALL) {
+    const input = el(field.input);
+    if (!input) continue;
+    input.addEventListener(field.boolean ? "change" : "input", () => {
+      onEdit(field, input,
+        () => fallDamage, (next) => { fallDamage = next; },
+        () => { clearTimeout(fallTimer); fallTimer = setTimeout(saveFallDamage, 150); });
+    });
+  }
+
+  // The split count is a number field, so it can be left half-typed or out of
+  // range. Snap it to what is actually in effect once the edit is committed.
+  el("apSplits").addEventListener("change", () => {
+    if (appearance) el("apSplits").value = appearance.visibleSplits;
+  });
+
+  for (const [id, step] of [["apSplitsDown", -1], ["apSplitsUp", 1]]) {
+    el(id).addEventListener("click", () => {
+      const input = el("apSplits");
+      const next = Math.min(30, Math.max(1, (Number.parseInt(input.value, 10) || 6) + step));
+      input.value = next;
+      input.dispatchEvent(new Event("input"));
+    });
   }
 
   el("apReset").addEventListener("click", async () => {
     try {
       const { settings } = await post("/api/appearance/reset");
-      showAppearance(settings);
+      appearance = settings;
+      show(APPEARANCE, settings);
       toast("Appearance reset");
     } catch (err) {
       toast(`Reset failed: ${err.message}`);
     }
   });
+
+  el("fdReset").addEventListener("click", async () => {
+    try {
+      const { fallDamage: settings } = await post("/api/tracking/reset");
+      fallDamage = settings;
+      show(FALL, settings);
+      toast("Fall settings reset");
+    } catch (err) {
+      toast(`Reset failed: ${err.message}`);
+    }
+  });
+
+  // --- recent damage, for checking the fall detector's calls ---
+
+  async function loadDamageEvents() {
+    let events = [];
+    try {
+      ({ events } = await (await fetch("/api/hits")).json());
+    } catch (err) {
+      toast(`Could not read recent damage: ${err.message}`);
+      return;
+    }
+
+    if (!events.length) {
+      dom.fdEvents.replaceChildren(
+        Object.assign(document.createElement("p"), {
+          className: "hint",
+          textContent: "Nothing yet. Take some damage and refresh.",
+        }));
+      return;
+    }
+
+    dom.fdEvents.replaceChildren(...events.map((e) => {
+      const row = document.createElement("div");
+      row.className = "event";
+      row.classList.toggle("is-fall", e.countedAsFall);
+      row.classList.toggle("is-fatal", e.fatal);
+
+      for (const [text, cls] of [
+        [formatTime(e.igtMs), "event__time"],
+        [e.split || "—", "event__split"],
+        [`${e.descentMetres.toFixed(1)} m`, "event__drop"],
+        [e.fatal ? "death" : (e.countedAsFall ? "fall" : "hit"), "event__verdict"],
+      ]) {
+        const cell = document.createElement("span");
+        cell.className = cls;
+        cell.textContent = text;
+        row.append(cell);
+      }
+
+      return row;
+    }));
+  }
+
+  el("fdRefresh").addEventListener("click", loadDamageEvents);
 
   // --- live status, from the same stream the overlay uses ---
 
@@ -309,7 +492,10 @@
     }
   });
 
+  restoreSections();
   loadCatalogue().catch((err) => toast(`Could not load routes: ${err.message}`));
+  loadAbout().catch(() => { /* the version is a nicety, not a requirement */ });
   loadHotkeys().catch(() => { /* hotkeys are optional; the buttons still work */ });
   loadAppearance().catch((err) => toast(`Could not load appearance: ${err.message}`));
+  loadFallDamage().catch((err) => toast(`Could not load fall settings: ${err.message}`));
 })();

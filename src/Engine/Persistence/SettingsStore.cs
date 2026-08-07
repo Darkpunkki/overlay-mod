@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using OverlayMod.Engine.Tracking;
 
 namespace OverlayMod.Engine.Persistence;
@@ -14,7 +13,9 @@ public sealed class SettingsStore
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() },
+        // ChallengeType brings its own converter, which tolerates the names 0.1.0
+        // wrote. Without it a remembered "Any%" selection would throw on load and
+        // silently drop the user back to the default route.
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 

@@ -130,9 +130,24 @@ public class FakeSnapshotSourceTests
         var tracker = RunDemo(untilMs: 105_000);
 
         Assert.Equal(RunPhase.Finished, tracker.Phase);
+        Assert.Equal(10, tracker.TotalDamage);
         Assert.Equal(9, tracker.TotalHits);
         Assert.Equal(1, tracker.TotalDeaths);
         Assert.All(tracker.Splits, s => Assert.True(s.Completed));
+    }
+
+    [Fact]
+    public void DemoRunIncludesAFall_SoNoDamageAndNoHitDisagree()
+    {
+        var tracker = RunDemo(untilMs: 105_000);
+
+        // The script drops the player down a shaft on the way to Greatwood. It
+        // is there so the difference between the two challenges is visible with
+        // --fake, without needing the game to reproduce it.
+        Assert.Equal(1, tracker.TotalFallDamage);
+        Assert.Equal(1, tracker.Splits[2].Approach.FallDamage);
+        Assert.Equal(2, tracker.Splits[2].Approach.Damage);
+        Assert.Equal(1, tracker.Splits[2].Approach.Hits);
     }
 
     [Fact]

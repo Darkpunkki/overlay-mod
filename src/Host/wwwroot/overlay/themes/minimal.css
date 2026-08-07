@@ -12,11 +12,8 @@
 
 .run,
 .splits,
-.active,
 .totals,
 .status {
   padding-left: 0;
   padding-right: 0;
 }
-
-.seg { border-color: rgb(255 255 255 / 18%); }

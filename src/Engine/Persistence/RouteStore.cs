@@ -17,9 +17,11 @@ public sealed class RouteStore
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() },
-        // Route names are user-facing text in a file meant to be hand-edited;
-        // the default encoder would escape ordinary punctuation into \uXXXX.
+        // No JsonStringEnumConverter here on purpose: ChallengeType carries its
+        // own converter, which reads names that no longer exist instead of
+        // throwing. A throw would not fall back to a default — it would take the
+        // whole route file down with it (see Reload), so every install that
+        // predates 0.2.0 would silently lose its All Bosses routes.
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 

@@ -67,7 +67,7 @@ public static class BuiltInRoutes
 
     public static RouteFile AllBosses => new(
         "All Bosses (main game)",
-        ChallengeType.AllBosses,
+        ChallengeType.Speedrun,
         MainGame)
     { FlagsVerified = false };
 
@@ -77,7 +77,7 @@ public static class BuiltInRoutes
     /// </summary>
     public static RouteFile AllBossesWithDlc => new(
         "All Bosses (with DLC)",
-        ChallengeType.AllBosses,
+        ChallengeType.Speedrun,
         MainGame[..^1]
             .Concat(new[] { SisterFriede, Gravetender, DemonPrince, Halflight, Midir, Gael, SoulOfCinder })
             .ToArray())
@@ -90,7 +90,7 @@ public static class BuiltInRoutes
     /// </summary>
     public static RouteFile Quick => new(
         "Quick route",
-        ChallengeType.NoHit,
+        ChallengeType.NoDamage,
         new[]
         {
             IudexGundyr,
@@ -115,7 +115,7 @@ public static class BuiltInRoutes
     /// </summary>
     public static RouteFile Demo => new(
         "Demo (first three bosses)",
-        ChallengeType.NoHit,
+        ChallengeType.NoDamage,
         new[] { IudexGundyr, Vordt, Greatwood })
     { FlagsVerified = false };
 

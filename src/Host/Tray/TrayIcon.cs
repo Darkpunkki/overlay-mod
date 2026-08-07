@@ -58,7 +58,7 @@ public sealed class TrayIcon : IDisposable
         {
             Icon = BuildIcon(out _iconHandle),
             // Tooltips are capped at 63 characters, so this has to stay short.
-            Text = $"OverlayMod — port {options.Port}",
+            Text = $"OverlayMod {BuildInfo.Version} — port {options.Port}",
             Visible = true,
             ContextMenuStrip = menu,
         };

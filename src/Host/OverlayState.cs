@@ -17,6 +17,7 @@ public sealed record OverlayState(
     string ProfileName,
     DisplayView Display,
     int RunIgtMs,
+    int TotalDamage,
     int TotalHits,
     int TotalDeaths,
     PrimaryView Primary,
@@ -44,11 +45,13 @@ public sealed record OverlayState(
                 s.IsBoss,
                 s.Completed,
                 s.IgtMs,
+                s.Damage,
                 s.Hits,
                 s.Deaths,
                 SegmentView.From(s.Approach),
                 SegmentView.From(s.Boss),
                 bests.SplitIgtMs(s.Name),
+                bests.SplitDamage(s.Name),
                 bests.SplitHits(s.Name),
                 bests.SplitDeaths(s.Name)));
         }
@@ -56,6 +59,7 @@ public sealed record OverlayState(
         var profile = route.Profile;
         var bestPrimary = profile.PrimaryMetric switch
         {
+            RunMetric.Damage => bests.BestTotalDamage,
             RunMetric.Hits => bests.BestTotalHits,
             RunMetric.Deaths => bests.BestTotalDeaths,
             RunMetric.Time => bests.BestRunIgtMs,
@@ -67,15 +71,13 @@ public sealed record OverlayState(
             tracker.Phase.ToString(),
             route.Name,
             profile.Name,
-            new DisplayView(
-                profile.PrimaryMetric.ToString(),
-                profile.ShowSegmentBreakdown,
-                profile.ShowDeaths),
+            new DisplayView(profile.PrimaryMetric.ToString(), profile.ShowTotalsFooter),
             tracker.RunIgtMs,
+            tracker.TotalDamage,
             tracker.TotalHits,
             tracker.TotalDeaths,
             new PrimaryView(profile.PrimaryMetric.ToString(), tracker.PrimaryValue, bestPrimary),
-            new BestsView(bests.BestRunIgtMs, bests.BestTotalHits, bests.BestTotalDeaths),
+            new BestsView(bests.BestRunIgtMs, bests.BestTotalDamage, bests.BestTotalHits, bests.BestTotalDeaths),
             new PlayerView(snapshot.PlayerLoaded, snapshot.IsLoading),
             snapshot.BossFightActive,
             tracker.ActiveIndex,
@@ -89,29 +91,39 @@ public sealed record OverlayState(
 /// the overlay's rendering logic.
 /// </summary>
 /// <param name="SplitMetric">
-/// Which value each split shows next to its personal best: "Hits", "Deaths" or
-/// "Time". All three are always sent, so the page picks rather than the server
-/// pre-flattening — which keeps the payload shape stable across profiles.
+/// Which value each split shows next to its personal best: "Damage", "Hits",
+/// "Deaths" or "Time". All four are always sent, so the page picks rather than
+/// the server pre-flattening — which keeps the payload shape stable across
+/// profiles.
 /// </param>
-public sealed record DisplayView(string SplitMetric, bool ShowSegmentBreakdown, bool ShowDeaths);
+/// <param name="ShowTotals">
+/// Whether the totals footer appears. Off for Speedrun, whose primary metric is
+/// already the run timer at the top of the overlay.
+/// </param>
+public sealed record DisplayView(string SplitMetric, bool ShowTotals);
 
 /// <summary>The metric this run is ranked by, alongside the best ever achieved.</summary>
 public sealed record PrimaryView(string Metric, int Value, int? Best);
 
 /// <summary>Whole-run bests. Null where the route has never been completed.</summary>
-public sealed record BestsView(int? RunIgtMs, int? TotalHits, int? TotalDeaths);
+public sealed record BestsView(int? RunIgtMs, int? TotalDamage, int? TotalHits, int? TotalDeaths);
 
 /// <summary>
 /// Only what the overlay needs to describe the game's state. Health is
 /// deliberately absent: the game's own UI already shows it, so duplicating it
 /// costs overlay space and viewer attention for nothing. HP is still read and
-/// is what hits and deaths are derived from — it just never reaches the screen.
+/// is what damage and deaths are derived from — it just never reaches the screen.
 /// </summary>
 public sealed record PlayerView(bool Loaded, bool Loading);
 
-public sealed record SegmentView(int IgtMs, int Hits, int Deaths)
+/// <summary>
+/// One segment's results. Still sent although nothing displays it today: the
+/// approach-versus-boss breakdown returns in Milestone 5, once boss-fight
+/// detection has an offset to stand on.
+/// </summary>
+public sealed record SegmentView(int IgtMs, int Damage, int Hits, int Deaths)
 {
-    public static SegmentView From(SegmentResult r) => new(r.IgtMs, r.Hits, r.Deaths);
+    public static SegmentView From(SegmentResult r) => new(r.IgtMs, r.Damage, r.Hits, r.Deaths);
 }
 
 public sealed record SplitView(
@@ -119,10 +131,12 @@ public sealed record SplitView(
     bool IsBoss,
     bool Completed,
     int IgtMs,
+    int Damage,
     int Hits,
     int Deaths,
     SegmentView Approach,
     SegmentView Boss,
     int? PbIgtMs,
+    int? PbDamage,
     int? PbHits,
     int? PbDeaths);

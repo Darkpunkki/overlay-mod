@@ -10,7 +10,7 @@
 // Query parameters:
 //   ?theme=<name>   load themes/<name>.css over the defaults
 //   ?scale=<n>      scale the whole overlay (0.5 - 4)
-//   ?splits=<n>     how many split rows to show at once (3 - 30)
+//   ?splits=<n>     how many split rows to show at once (1 - 30)
 
 (() => {
   "use strict";
@@ -20,24 +20,19 @@
   const dom = {
     overlay: el("overlay"),
     runTimer: el("runTimer"),
-    routeName: el("routeName"),
+    runPb: el("runPb"),
     profileName: el("profileName"),
     splits: el("splits"),
-    active: el("active"),
-    activeName: el("activeName"),
-    approachHits: el("approachHits"),
-    bossHits: el("bossHits"),
+    totals: el("totals"),
     primaryLabel: el("primaryLabel"),
     primaryValue: el("primaryValue"),
     primaryPb: el("primaryPb"),
-    deathsTotal: el("deathsTotal"),
-    totalDeaths: el("totalDeaths"),
     status: el("status"),
   };
 
   // How many split rows to show at once, LiveSplit style. The list stays this
   // tall no matter how long the route is, so a 25-boss route needs no more room
-  // than a 3-boss one. Override with ?splits=N.
+  // than a 3-boss one. Set it on the control page, or with ?splits=N.
   let visibleSplits = 6;
 
   // Treat the stream as dead if nothing arrives for this long. The host ticks
@@ -98,7 +93,7 @@
     }
 
     const splits = Number.parseInt(params.get("splits") ?? "", 10);
-    if (Number.isFinite(splits)) visibleSplits = Math.min(Math.max(splits, 3), 30);
+    if (Number.isFinite(splits)) visibleSplits = Math.min(Math.max(splits, 1), 30);
 
     // Only ever build a same-origin path from a restricted character set, so a
     // crafted URL cannot pull in a stylesheet from somewhere else.
@@ -128,13 +123,19 @@
 
   const has = (v) => v !== null && v !== undefined;
 
-  // Lower is better for every metric we track: hits, deaths and time alike.
+  // Lower is better for every metric we track: damage, hits, deaths and time
+  // alike. The two classes are mirrored between the live value and its personal
+  // best, so one of the pair is always green and the other red — a glance says
+  // which number is the good one without having to work out which column is which.
   function comparisonClass(value, best) {
     if (!has(best)) return "";
     if (value < best) return "is-ahead";
     if (value > best) return "is-behind";
     return "is-tied";
   }
+
+  const mirrored = (cls) =>
+    cls === "is-ahead" ? "is-behind" : cls === "is-behind" ? "is-ahead" : cls;
 
   // --- rendering ---
 
@@ -157,7 +158,8 @@
     switch (metric) {
       case "Time": return { value: split.igtMs, best: split.pbIgtMs, format: formatTime };
       case "Deaths": return { value: split.deaths, best: split.pbDeaths, format: String };
-      default: return { value: split.hits, best: split.pbHits, format: String };
+      case "Hits": return { value: split.hits, best: split.pbHits, format: String };
+      default: return { value: split.damage, best: split.pbDamage, format: String };
     }
   }
 
@@ -196,20 +198,18 @@
       name.className = "split__name";
       name.textContent = s.name;
 
+      const cls = started ? comparisonClass(value, best) : "";
+
       const current = document.createElement("span");
       current.className = "split__value";
-      if (started) {
-        current.textContent = format(value);
-        const cls = comparisonClass(value, best);
-        if (cls) current.classList.add(cls);
-      } else {
-        current.textContent = EM_DASH;
-      }
+      current.textContent = started ? format(value) : EM_DASH;
+      if (cls) current.classList.add(cls);
 
       // The best this split has ever been, so progress is legible at a glance.
       const pb = document.createElement("span");
       pb.className = "split__pb";
       pb.textContent = has(best) ? format(best) : EM_DASH;
+      if (cls) pb.classList.add(mirrored(cls));
 
       li.append(name, current, pb);
       rows.push(li);
@@ -218,33 +218,31 @@
     dom.splits.replaceChildren(...rows);
   }
 
-  function renderActiveSegments(state) {
-    const active = state.splits[state.activeIndex];
-    const show = state.display.showSegmentBreakdown && active && state.phase === "Running";
-
-    dom.active.hidden = !show;
-    if (!show) return;
-
-    dom.activeName.textContent = active.name;
-    dom.approachHits.textContent = active.approach.hits;
-    dom.bossHits.textContent = active.boss.hits;
-  }
-
   function renderTotals(state) {
     const primary = state.primary;
     const isTime = primary.metric === "Time";
     const format = (v) => (isTime ? formatTime(v) : v);
 
-    dom.primaryLabel.textContent = primary.metric;
-    dom.primaryValue.textContent = format(primary.value);
-    dom.primaryValue.className = "total__value";
-    const cls = comparisonClass(primary.value, primary.best);
-    if (cls) dom.primaryValue.classList.add(cls);
+    // Speedrun ranks by time, which the run timer at the top already shows in a
+    // much larger font. Rather than print it twice, that profile drops the
+    // footer and puts the whole-run best under the timer instead.
+    dom.totals.hidden = !state.display.showTotals;
+    dom.runPb.hidden = state.display.showTotals;
 
-    dom.primaryPb.textContent = has(primary.best) ? `pb ${format(primary.best)}` : `pb ${EM_DASH}`;
+    if (state.display.showTotals) {
+      dom.primaryLabel.textContent = primary.metric;
+      dom.primaryValue.textContent = format(primary.value);
+      dom.primaryValue.className = "total__value";
+      const cls = comparisonClass(primary.value, primary.best);
+      if (cls) dom.primaryValue.classList.add(cls);
 
-    dom.deathsTotal.hidden = !state.display.showDeaths;
-    dom.totalDeaths.textContent = state.totalDeaths;
+      dom.primaryPb.textContent = has(primary.best) ? `pb ${format(primary.best)}` : `pb ${EM_DASH}`;
+    } else {
+      dom.runPb.className = "run__pb";
+      dom.runPb.textContent = has(primary.best) ? `pb ${format(primary.best)}` : `pb ${EM_DASH}`;
+      const cls = comparisonClass(primary.value, primary.best);
+      if (cls) dom.runPb.classList.add(mirrored(cls));
+    }
   }
 
   function renderStatus(state) {
@@ -262,14 +260,13 @@
     // Cheap: only actually fetches when the version has moved.
     refreshAppearance(state.appearanceVersion);
 
-    dom.overlay.classList.toggle("is-boss-active", !!state.bossFightActive);
-
+    // Nothing styles a boss fight now that the approach/boss breakdown is gone,
+    // and bossFightActive is always false in a real game anyway. The flag stays
+    // in the payload; the class comes back with the breakdown in Milestone 5.
     dom.runTimer.textContent = formatTime(state.runIgtMs);
-    dom.routeName.textContent = state.routeName || EM_DASH;
     dom.profileName.textContent = state.profileName || "";
 
     renderSplits(state);
-    renderActiveSegments(state);
     renderTotals(state);
     renderStatus(state);
   }

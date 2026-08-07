@@ -52,6 +52,10 @@
     <AssemblyName>OverlayMod</AssemblyName>
     <Product>OverlayMod</Product>
     <Description>Dark Souls III run tracker and overlay</Description>
+
+    <!-- Surfaced in the log banner, on the control page and in the tray tooltip.
+         A user reporting a problem should never have to guess which build. -->
+    <Version>0.2.0</Version>
   </PropertyGroup>
 
 </Project>

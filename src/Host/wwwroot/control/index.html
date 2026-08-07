@@ -9,18 +9,22 @@
 <body>
   <main class="page">
     <header class="head">
-      <h1>OverlayMod</h1>
+      <h1>OverlayMod <span class="head__version" id="version"></span></h1>
       <p class="head__sub">Pick what you're running. The overlay updates immediately.</p>
     </header>
 
-    <section class="card">
-      <h2>Challenge</h2>
+    <!-- Every section collapses. The page grew past what fits on one screen, and
+         which parts matter depends entirely on whether you are setting up or
+         mid-session. Open/closed is remembered per section. -->
+    <details class="card" id="cardChallenge" open>
+      <summary class="card__head"><h2>Challenge</h2></summary>
       <p class="hint">Decides what the overlay shows and what your runs are ranked by.</p>
       <div class="choices" id="challenges"></div>
-    </section>
+      <p class="hint" id="challengeNote"></p>
+    </details>
 
-    <section class="card">
-      <h2>Route</h2>
+    <details class="card" id="cardRoute" open>
+      <summary class="card__head"><h2>Route</h2></summary>
       <p class="hint">
         Route files live in <code id="routesPath">appdata/routes</code> and are plain JSON —
         edit them freely, then reload.
@@ -35,10 +39,10 @@
         keeps it deleted. <strong>Restore</strong> writes back any that are
         missing — including routes added in a newer version.
       </p>
-    </section>
+    </details>
 
-    <section class="card">
-      <h2>Run</h2>
+    <details class="card" id="cardRun" open>
+      <summary class="card__head"><h2>Run</h2></summary>
       <div class="row">
         <button class="btn" id="start" type="button">Start</button>
         <button class="btn" id="split" type="button">Split</button>
@@ -53,10 +57,10 @@
         Global hotkeys work while the game has focus. Change them in
         <code>appdata/hotkeys.json</code> and restart the host.
       </p>
-    </section>
+    </details>
 
-    <section class="card">
-      <h2>Appearance</h2>
+    <details class="card" id="cardAppearance">
+      <summary class="card__head"><h2>Appearance</h2></summary>
       <p class="hint">
         Changes apply straight away, in the browser and in OBS. The preview sits on
         a chequerboard so you can see what is transparent.
@@ -84,13 +88,23 @@
           <input type="range" id="apShadow" min="0" max="1" step="0.05">
           <output class="field__value" id="apShadowOut">90%</output>
         </label>
-
-        <label class="field">
-          <span class="field__label">Split rows</span>
-          <input type="range" id="apSplits" min="3" max="20" step="1">
-          <output class="field__value" id="apSplitsOut">6</output>
-        </label>
       </div>
+
+      <!-- A number rather than a slider: this is a count of rows, and people
+           arrive here knowing exactly how many they want. -->
+      <div class="field field--stepper">
+        <span class="field__label">Splits shown</span>
+        <div class="stepper">
+          <button class="stepper__btn" id="apSplitsDown" type="button" aria-label="Fewer splits">−</button>
+          <input class="stepper__input" type="number" id="apSplits" min="1" max="30" step="1" inputmode="numeric">
+          <button class="stepper__btn" id="apSplitsUp" type="button" aria-label="More splits">+</button>
+        </div>
+      </div>
+      <p class="hint">
+        How many boss names the overlay shows at once. The list scrolls through
+        longer routes, so this is the overlay's height, not the route's length —
+        set it to the full split count to show a whole route with no scrolling.
+      </p>
 
       <div class="swatches">
         <label class="swatch"><input type="color" id="apAccent"><span>Active split</span></label>
@@ -102,10 +116,55 @@
       </div>
 
       <button class="btn btn--quiet" id="apReset" type="button">Reset to defaults</button>
-    </section>
+    </details>
 
-    <section class="card status" id="live">
-      <h2>Now</h2>
+    <details class="card" id="cardFall">
+      <summary class="card__head"><h2>Fall damage</h2></summary>
+      <p class="hint">
+        Only the <strong>No Hit</strong> challenge uses this. It tells fall damage
+        apart by watching how far you dropped just before losing health — a
+        heuristic, not a reading from the game, so the thresholds are yours to move.
+        Every other challenge counts all damage regardless.
+      </p>
+
+      <label class="check">
+        <input type="checkbox" id="fdEnabled">
+        <span>Exclude fall damage from No&nbsp;Hit</span>
+      </label>
+      <p class="hint">
+        Turn this off and No Hit counts exactly what No Damage counts. That is the
+        honest setting if the detector is guessing wrong on your route.
+      </p>
+
+      <div class="fields">
+        <label class="field">
+          <span class="field__label">Drop of at least</span>
+          <input type="range" id="fdDescent" min="0.5" max="20" step="0.5">
+          <output class="field__value" id="fdDescentOut">3.0 m</output>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Within</span>
+          <input type="range" id="fdWindow" min="100" max="2000" step="50">
+          <output class="field__value" id="fdWindowOut">500 ms</output>
+        </label>
+      </div>
+
+      <div class="row">
+        <button class="btn btn--quiet" id="fdRefresh" type="button">Refresh recent damage</button>
+        <button class="btn btn--quiet" id="fdReset" type="button">Reset to defaults</button>
+      </div>
+
+      <p class="hint">
+        Recent damage, newest first, with the drop measured for each. This is how
+        you check the detector rather than trust it: if a real hit is showing as a
+        fall, raise the distance or shorten the window.
+      </p>
+      <div class="events" id="fdEvents"></div>
+    </details>
+
+    <details class="card status" id="cardLive" open>
+      <summary class="card__head"><h2>Now</h2></summary>
       <dl class="facts">
         <dt>Game</dt><dd id="factGame">—</dd>
         <dt>Phase</dt><dd id="factPhase">—</dd>
@@ -113,17 +172,17 @@
         <dt>Split</dt><dd id="factSplit">—</dd>
       </dl>
       <p class="hint">Overlay URL for OBS: <code id="overlayUrl">/overlay/</code></p>
-    </section>
+    </details>
 
-    <section class="card">
-      <h2>Shut down</h2>
+    <details class="card" id="cardQuit">
+      <summary class="card__head"><h2>Shut down</h2></summary>
       <p class="hint">
         OverlayMod runs in the background with an icon in the notification area
         (behind the <strong>^</strong> arrow by the clock). Closing the terminal
         will not stop it.
       </p>
       <button class="btn btn--quiet" id="quit" type="button">Quit OverlayMod</button>
-    </section>
+    </details>
 
     <p class="toast" id="toast" hidden></p>
   </main>

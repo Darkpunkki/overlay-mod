@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace OverlayMod.Engine.Tracking;
 
 /// <summary>
@@ -22,8 +24,36 @@ public sealed record SplitState(
     bool IsBoss,
     bool Completed,
     int ApproachIgtMs,
-    int ApproachHits,
+    int ApproachDamage,
+    int ApproachFallDamage,
     int ApproachDeaths,
     int BossIgtMs,
-    int BossHits,
-    int BossDeaths);
+    int BossDamage,
+    int BossFallDamage,
+    int BossDeaths)
+{
+    /// <summary>
+    /// What 0.1.0 called hits. It counted every drop in health, which is damage
+    /// under the current names — so a run parked by the older version is carried
+    /// forward rather than resuming with its damage silently zeroed.
+    /// </summary>
+    [JsonPropertyName("approachHits")]
+    public int? LegacyApproachHits { get; init; }
+
+    [JsonPropertyName("bossHits")]
+    public int? LegacyBossHits { get; init; }
+
+    /// <summary>Fold any legacy field into its current equivalent.</summary>
+    public SplitState Migrated()
+    {
+        if (LegacyApproachHits is null && LegacyBossHits is null) return this;
+
+        return this with
+        {
+            ApproachDamage = ApproachDamage > 0 ? ApproachDamage : LegacyApproachHits ?? 0,
+            BossDamage = BossDamage > 0 ? BossDamage : LegacyBossHits ?? 0,
+            LegacyApproachHits = null,
+            LegacyBossHits = null,
+        };
+    }
+}

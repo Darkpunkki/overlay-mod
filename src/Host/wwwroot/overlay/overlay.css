@@ -22,10 +22,10 @@
   --om-shadow: 0 1px 3px rgb(0 0 0 / 90%);
 
   --om-accent: #e0b65c;      /* the active split */
-  --om-boss: #d8685a;
-  --om-approach: #5a9dd8;
 
-  /* Comparison against personal bests. Lower is better for every metric. */
+  /* Comparison against personal bests. Lower is better for every metric, and
+     the pair is mirrored: whichever of the live value and the best is the
+     better number wears --om-ahead, the other --om-behind. */
   --om-ahead: #6fbf73;
   --om-behind: #d8685a;
   --om-tied: #d0d0d4;
@@ -60,7 +60,6 @@ html, body {
 
 .run,
 .splits,
-.active,
 .totals,
 .status {
   background: var(--om-plate);
@@ -89,6 +88,18 @@ html, body {
 }
 
 .run__profile { color: var(--om-accent); }
+
+/* The whole-run best, for challenges that drop the totals footer. */
+.run__pb {
+  font-family: var(--om-font-numeric);
+  font-variant-numeric: tabular-nums;
+  color: var(--om-text-faint);
+}
+
+.run__pb[hidden] { display: none; }
+.run__pb.is-ahead { color: var(--om-ahead); }
+.run__pb.is-behind { color: var(--om-behind); }
+.run__pb.is-tied { color: var(--om-tied); }
 
 /* --- split list --- */
 
@@ -130,10 +141,18 @@ html, body {
 
 .split__pb { color: var(--om-text-faint); }
 
-/* The live value against this split's own best. */
-.split__value.is-ahead { color: var(--om-ahead); }
-.split__value.is-behind { color: var(--om-behind); }
-.split__value.is-tied { color: var(--om-tied); }
+/* The live value against this split's own best, and the best against the live
+   value. The classes are mirrored, so beating your best paints it green and
+   the best red — and falling behind swaps them. One green and one red in the
+   row means the eye finds the better number without reading the header. */
+.split__value.is-ahead,
+.split__pb.is-ahead { color: var(--om-ahead); }
+
+.split__value.is-behind,
+.split__pb.is-behind { color: var(--om-behind); }
+
+.split__value.is-tied,
+.split__pb.is-tied { color: var(--om-tied); }
 
 /* Column header: two bare numbers per row are ambiguous without it. */
 .split--head {
@@ -160,54 +179,16 @@ html, body {
 .split.is-pending { color: var(--om-text-faint); }
 .split.is-pending .split__value { color: var(--om-text-faint); }
 
-/* --- active split detail: the approach-vs-boss breakdown --- */
-
-.active[hidden] { display: none; }
-
-.active__name {
-  font-size: 0.7rem;
-  color: var(--om-text-dim);
-  margin-bottom: 0.3rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.active__segments { display: flex; gap: var(--om-gap); }
-
-.seg {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--om-radius);
-  border: 1px solid var(--om-plate-edge);
-}
-
-.seg__label {
-  font-size: 0.625rem;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  color: var(--om-text-dim);
-}
-
-.seg__value {
-  font-family: var(--om-font-numeric);
-  font-size: 1.375rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.seg--approach { border-color: color-mix(in srgb, var(--om-approach) 45%, transparent); }
-.seg--boss { border-color: color-mix(in srgb, var(--om-boss) 45%, transparent); }
-
-/* Highlight whichever segment the player is currently in. */
-.overlay.is-boss-active .seg--boss { background: color-mix(in srgb, var(--om-boss) 22%, transparent); }
-.overlay:not(.is-boss-active) .seg--approach { background: color-mix(in srgb, var(--om-approach) 22%, transparent); }
+/* The approach-vs-boss breakdown that used to live here was removed with the
+   All Bosses challenge. It was the only profile that showed it, and it is
+   always empty in a real game because nothing sets bossFightActive yet. The
+   engine still records both segments — Milestone 5 brings the display back
+   once boss-fight detection has an offset to stand on. */
 
 /* --- totals --- */
 
 .totals { display: flex; gap: 1rem; align-items: baseline; }
+.totals[hidden] { display: none; }
 .total { display: flex; gap: 0.4rem; align-items: baseline; }
 .total[hidden] { display: none; }
 

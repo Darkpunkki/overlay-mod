@@ -3,8 +3,8 @@ namespace OverlayMod.Engine.Tracking;
 /// <summary>
 /// The on-disk form of a route: an ordered list of splits, plus the challenge it
 /// is normally run under. Separate from <see cref="Route"/> because a route is
-/// just a list of things to beat — the same boss list can be run as No-Hit or as
-/// Any%, so the profile is chosen when the route is loaded, not baked into it.
+/// just a list of things to beat — the same boss list can be run as No Hit or as
+/// a Speedrun, so the profile is chosen when the route is loaded, not baked into it.
 /// </summary>
 public sealed record RouteFile(
     string Name,

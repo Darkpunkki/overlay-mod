@@ -110,13 +110,38 @@ The challenge decides what the overlay shows and what your runs are judged on.
 
 | Challenge | Judged on | Each split shows |
 |---|---|---|
-| **No-Hit** | Total hits | Hits taken, against your best for that boss |
+| **No Damage** | Every drop in health | Damage taken, against your best for that boss |
+| **No Hit** | Damage, **excluding falls** | Hits taken, against your best for that boss |
 | **Deathless** | Deaths | Deaths, against your best for that boss |
-| **Any%** | Time | Split time, against your best for that boss |
-| **All Bosses** | Time | Split time, plus approach-vs-boss hit breakdown |
+| **Speedrun** | Time | Split time, against your best for that boss |
 
-A run is never failed automatically. Take a hit in a No-Hit run and it keeps
+**No Damage and No Hit differ in one respect.** No Damage counts everything, so
+mistiming a drop costs you the run. No Hit ignores damage you took landing, so it
+measures only what the game dealt you. No Damage is the stricter of the two, and
+the one that needs no guesswork to be correct — see below.
+
+Speedrun shows no hit counter at all: the run clock, and each split against its
+own best. Beating a split's best paints it green and paints the best red; falling
+behind swaps them, so the better number is always the green one.
+
+A run is never failed automatically. Take a hit in a No Hit run and it keeps
 counting — finish the attempt and see how it compares.
+
+### How fall damage is told apart
+
+By watching how far you dropped just before you lost health: a fall of more than
+3 metres inside the preceding half-second, by default.
+
+That is a measurement of your height, **not a reading of what damaged you**. The
+game does record that, but through a pointer chain this project has not found.
+So the detector will get things wrong at the edges — most obviously a real hit
+landing within a few frames of your feet touching down.
+
+Which is why you can check it. The control panel's **Fall damage** section lists
+recent damage with the drop measured for each and the call it made, and lets you
+move the thresholds or switch the whole thing off. Off means No Hit counts
+exactly what No Damage counts, which is the honest setting if it is misjudging
+your route.
 
 ### Personal bests
 
@@ -143,9 +168,17 @@ If a split ever fails to advance on its own, the **Split** hotkey moves it along
 
 ## Customising the look
 
-The control panel's **Appearance** section changes size, colours, panel
-transparency and how many split rows show, with a live preview on a chequerboard
-so you can see what is see-through. Changes apply immediately, including in OBS.
+The control panel's **Appearance** section changes size, colours and panel
+transparency, with a live preview on a chequerboard so you can see what is
+see-through. Changes apply immediately, including in OBS.
+
+**Splits shown** is the number of boss names on screen at once — type it or step
+it, 1 to 30. The list scrolls through longer routes, so this sets the overlay's
+height rather than the route's length: set it to the route's full split count to
+show everything with no scrolling.
+
+Every section of the control panel collapses, and remembers whether you left it
+open.
 
 ## Hotkeys
 
@@ -183,18 +216,23 @@ executable, or **Open log file** on the tray icon.
 | Numbers are zero or nonsense | Note your game version (main menu, bottom corner) and open an issue with the log |
 | A boss kill did not split | `http://127.0.0.1:8777/api/diagnostics?flag=<id>` reports every step of the lookup. Split manually with `Ctrl+Alt+D` meanwhile |
 | Hotkeys do nothing | Another app may own the combination; the control panel marks unbound ones |
+| A hit was counted as a fall, or missed | **Fall damage → Recent damage** on the control panel shows what was called and why. Only No Hit is affected |
 
 Known limitations:
 
-- **Fall damage counts as a hit.** Telling damage sources apart is not built yet.
-- **The approach-vs-boss breakdown is always empty**, because detecting when a
-  boss fight is active needs a memory offset that has not been found. It only
-  affects the All Bosses profile.
+- **Fall damage is detected by a heuristic, not read from the game.** No Hit is
+  only as good as that guess. See [How fall damage is told
+  apart](#how-fall-damage-is-told-apart); No Damage is unaffected.
+- **The approach-vs-boss breakdown is recorded but not displayed**, because
+  detecting when a boss fight is active needs a memory offset that has not been
+  found, which leaves it empty in a real game.
 - **Auto-splitting has been confirmed to read boss flags correctly**, but has not
   yet been watched through a full run.
 
 ## More
 
+- [CHANGELOG.md](CHANGELOG.md) — what changed, and what upgrading does to your
+  existing personal bests
 - [docs/LIVE-TESTING.md](docs/LIVE-TESTING.md) — launching offline without EAC,
   and what still needs checking against the real game
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — building, testing, architecture
