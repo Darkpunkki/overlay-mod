@@ -209,6 +209,35 @@ Decisions not yet made. Flagged here rather than silently assumed.
   keeps the descent it measured so `GET /api/hits` can be read back after a run.
   *The SpEffect read replaces it when the offset is found — same seam, different
   classifier — and is worth doing in the same session as the boss-HP hunt.*
+- **No counter may depend on a memory read whose only job is to corroborate
+  another one.** 0.2.0 required `MaxHp > 0` before it would look at health at
+  all, as proof the data module had been populated. It was a new dependency on
+  an offset nothing else used, and on an older game patch — where it does not
+  land where we expect — it switched damage, hits and deaths off together while
+  the run timer carried on, because the timer needs no such reading. Every
+  challenge that counts something looked broken and Speedrun looked fine.
+  **A guard that can disable the whole feature it protects is worse than the
+  transient it guards against.** Persistence replaced it: zero health across
+  several consecutive readings tells a corpse from a pointer being rebuilt, and
+  needs no offset to be right. Version-dependent reads are a liability in
+  proportion to how much rests on them, and the version table only covers what
+  has actually been seen.
+- **Health is shown on the control page, and only there.** It stays off the
+  overlay and out of the view model for the reasons already recorded, but damage,
+  hits and deaths are all derived from that one reading, so when no counter moves
+  it is the fact that explains it. The control page fetches it from
+  `/api/diagnostics` rather than the state stream, so nothing rides along at
+  30 Hz. Found the hard way: a user on an older patch, where `0 / 0` on a live
+  character says in one glance what a log full of zeros does not.
+- **A new character is recognised by its own clock, not by the previous run's.**
+  The check asked whether the run being replaced was longer than a minute, which
+  meant that after a short session — testing, most obviously — starting a new
+  game looked like an ordinary save-point rewind and carried the old counters
+  into the new character. It asks about the save just loaded instead. Below a
+  minute of in-game time a backwards clock is called a new character even though
+  a genuine save could rewind that far: both readings are cheap to be wrong about
+  there, and the same mistake two hours into an attempt is not, which is what the
+  rewind tolerance exists for.
 - **A death is latched on zero health, not detected as an edge.** The original
   code required a positive reading followed by a zero one, which needs both
   neighbours of the transition. The game raises its loading flag as the death

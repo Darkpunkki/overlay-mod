@@ -214,6 +214,7 @@ executable, or **Open log file** on the tray icon.
 |---|---|
 | Control panel says "not running" | Check DS3 is running and was launched directly rather than through the EAC launcher. Try running OverlayMod as administrator |
 | Numbers are zero or nonsense | Note your game version (main menu, bottom corner) and open an issue with the log |
+| Timer runs but nothing counts | Check **Health** under **Now** on the control panel. Real numbers while you play means the reading works; `0 / 0` while standing in a level means the memory offsets are wrong for your game version, and no amount of playing will move the counters. Tested against **1.15.2.0**; older patches move these offsets |
 | A boss kill did not split | `http://127.0.0.1:8777/api/diagnostics?flag=<id>` reports every step of the lookup. Split manually with `Ctrl+Alt+D` meanwhile |
 | Hotkeys do nothing | Another app may own the combination; the control panel marks unbound ones |
 | A hit was counted as a fall, or missed | **Fall damage → Recent damage** on the control panel shows what was called and why. Only No Hit is affected |

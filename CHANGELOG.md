@@ -41,6 +41,12 @@ running, this is the release you want.**
   worth seeing: a live character reading `0 / 0` means the memory offsets are
   wrong for that build, and no amount of playing will move the counters.
 
+  This is not hypothetical: 0.2.0 counted nothing on an **older Dark Souls III
+  patch**, where that reading does not land where OverlayMod expects. Everything
+  here is tested against **1.15.2.0**. Older patches move some of these offsets,
+  and only some of the moves are known — the Health row is how you find out
+  which side of that line your game is on.
+
 ## 0.2.0
 
 ### Challenges
