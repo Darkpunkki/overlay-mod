@@ -61,7 +61,32 @@ foreach (var candidate in new[] { physical, developmentRoot })
 }
 
 app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = pages });  // /overlay/ -> /overlay/index.html
-app.UseStaticFiles(new StaticFileOptions { FileProvider = pages });
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = pages,
+    // Never let a client hold onto these.
+    //
+    // The page is markup and script that have to agree with each other: the
+    // script looks up elements by id, and an update that renames one breaks the
+    // pairing. A cache that serves a stale half of the pair produces a page that
+    // loads, throws on the first frame, and then sits there — which reads as
+    // "the overlay is frozen", not as "the overlay is broken", and hides the
+    // cause completely.
+    //
+    // OBS's browser source keeps its own cache, separate from any browser and
+    // not cleared by restarting OBS, so this is not hypothetical: the same
+    // machine can show a working overlay in a browser tab and a stale one in
+    // the recording. Without a Cache-Control header a client is free to guess
+    // how long these stay fresh, and CEF guesses generously.
+    //
+    // "no-cache" means revalidate, not "don't store" — the ETag still makes
+    // that a 304 in the ordinary case, and these files total a few KB over
+    // loopback either way.
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.CacheControl = "no-cache, must-revalidate";
+    },
+});
 
 app.MapGet("/", () => Results.Redirect("/overlay/"));
 

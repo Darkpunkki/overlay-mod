@@ -288,7 +288,18 @@
     try {
       render(JSON.parse(event.data));
     } catch (err) {
-      console.error("[OverlayMod] bad payload", err);
+      // Say so on the page, not only in a console nobody can open.
+      //
+      // Data is arriving and being rejected, which looks identical to a frozen
+      // overlay: the markup keeps the zeros it was written with and nothing
+      // ever moves. In a browser that costs a look at the console; in an OBS
+      // browser source there is no console to look at, and the same failure is
+      // indistinguishable from the game not running.
+      //
+      // The usual cause is a cached copy of one of these files that no longer
+      // matches the other — hence the advice, which is the fix in that case.
+      console.error("[OverlayMod] render failed", err);
+      markDisconnected("overlay error — refresh this page's cache");
     }
   };
 
