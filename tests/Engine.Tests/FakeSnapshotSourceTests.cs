@@ -130,7 +130,9 @@ public class FakeSnapshotSourceTests
         var tracker = RunDemo(untilMs: 105_000);
 
         Assert.Equal(RunPhase.Finished, tracker.Phase);
-        Assert.Equal(10, tracker.TotalDamage);
+        Assert.Equal(14, tracker.TotalDamage);
+        Assert.Equal(1, tracker.TotalFallDamage);
+        Assert.Equal(4, tracker.TotalTickDamage);
         Assert.Equal(9, tracker.TotalHits);
         Assert.Equal(1, tracker.TotalDeaths);
         Assert.All(tracker.Splits, s => Assert.True(s.Completed));
@@ -141,13 +143,34 @@ public class FakeSnapshotSourceTests
     {
         var tracker = RunDemo(untilMs: 105_000);
 
-        // The script drops the player down a shaft on the way to Greatwood. It
-        // is there so the difference between the two challenges is visible with
-        // --fake, without needing the game to reproduce it.
+        // The script drops the player down a shaft on the way to Greatwood, then
+        // poisons them in the swamp below. Both are there so the difference
+        // between the two challenges is visible with --fake, without needing the
+        // game to reproduce it.
         Assert.Equal(1, tracker.TotalFallDamage);
         Assert.Equal(1, tracker.Splits[2].Approach.FallDamage);
-        Assert.Equal(2, tracker.Splits[2].Approach.Damage);
+
+        // The fall, one real hit, and the first two poison ticks.
+        Assert.Equal(4, tracker.Splits[2].Approach.Damage);
+        Assert.Equal(2, tracker.Splits[2].Approach.TickDamage);
         Assert.Equal(1, tracker.Splits[2].Approach.Hits);
+    }
+
+    [Fact]
+    public void DemoRunIncludesPoison_WhichNoHitDoesNotCount()
+    {
+        var tracker = RunDemo(untilMs: 105_000);
+
+        // Four ticks, two either side of the boss-fight transition. Every one of
+        // them costs health and none of them is a hit.
+        Assert.Equal(4, tracker.TotalTickDamage);
+        Assert.Equal(2, tracker.Splits[2].Approach.TickDamage);
+        Assert.Equal(2, tracker.Splits[2].Boss.TickDamage);
+
+        // The third tick is what proves the pattern, so the two before it are
+        // reclassified rather than left waiting.
+        Assert.Equal(0, tracker.Splits[2].Approach.PendingDamage);
+        Assert.Equal(0, tracker.Splits[2].Boss.PendingDamage);
     }
 
     [Fact]

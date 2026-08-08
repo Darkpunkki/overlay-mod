@@ -199,9 +199,9 @@ Select **No Hit**. Then, deliberately:
 1. **Take a fall that hurts** — off a ledge you know you survive. The hit count
    should **not** move. The **damage** count under No Damage would have.
 2. **Take an ordinary hit on level ground.** The hit count **should** move.
-3. Open **Fall damage → Recent damage** on the control page. Each event shows
-   the drop measured and the call made. That list is the actual test — the
-   counters only show the result.
+3. Open **What counts as a hit → Recent damage** on the control page. Each event
+   shows the health it cost, the drop measured, and the call made. That list is
+   the actual test — the counters only show the result.
 
 Then play a normal segment of your route and read the list back. What matters is
 whether any *real* hit was written off as a fall, which is the failure that
@@ -215,7 +215,34 @@ which is honest rather than wrong.
 The game does record the latter, through a pointer chain that has not been found.
 Until it is, this is a guess with its working shown.*
 
-### 4.8 — Approach vs. boss *(still blocked)*
+### 4.8 — Poison and toxic *(new in 0.2.2 — the size threshold is a guess)*
+
+Still on **No Hit**. Walk into the poison swamp below the Road of Sacrifices, or
+take a Rotten Pine Resin to the face, and let the effect run its whole course.
+
+1. **The hit count should not move at all** while it ticks. Damage under No
+   Damage would have gone up once per tick.
+2. Open **Recent damage** again. Every tick should read **over time**, and the
+   `HP` column tells you what a tick actually costs on your character.
+3. **Get hit by something while poisoned.** That hit must still count. This is
+   the failure worth hunting: a detector that swallows real hits alongside the
+   poison is worse than one that never worked.
+
+The number to report back is the one in the `HP` column. The default ceiling is
+**40 HP per bite**, which is a guess — if your ticks are bigger than that they
+will keep counting as hits, and the fix is to raise **Bites no bigger than**
+until they stop. If a real hit is showing as **over time**, lower it instead.
+
+The first two bites of any episode read **deciding…** for a few seconds before
+settling. That is expected: nothing can be shown to be poison until a third one
+arrives, and the alternative — counting them and taking them back — would make
+the hit counter flicker for the whole minute.
+
+*Why it matters: as with falls, this reads the shape of the damage rather than
+its cause. The game knows you are poisoned; the pointer chain that says so has
+not been found. Both classifiers are guesses with their working shown.*
+
+### 4.9 — Approach vs. boss *(still blocked)*
 
 Both segments are still recorded, and every hit still lands in Approach even
 during a boss fight, because nothing sets the boss-fight flag — the memory offset

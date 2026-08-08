@@ -12,8 +12,9 @@ namespace OverlayMod.Engine.Tracking;
 ///  - Time uses IGT deltas, which already pause during loads; a sanity cap
 ///    guards against menu/save-load jumps.
 ///  - Damage is derived from HP decreases, debounced so a multi-tick drop counts
-///    once, and classified by <see cref="FallDetector"/> into damage the game
-///    dealt (hits) and damage the ground dealt.
+///    once, and then classified: <see cref="FallDetector"/> picks out what the
+///    ground did and <see cref="DamageOverTimeDetector"/> what poison and toxic
+///    did, leaving hits as what is left.
 ///  - Deaths are latched on health reaching zero, not edge-detected. See
 ///    <see cref="Update"/>.
 ///  - Approach vs boss attribution is driven by <see cref="GameSnapshot.BossFightActive"/>.
@@ -41,6 +42,7 @@ public sealed class RunTracker
     private readonly List<SplitResult> _splits = new();
     private readonly List<DamageEvent> _recentDamage = new(RecentDamageCapacity);
     private readonly FallDetector _fall = new();
+    private readonly DamageOverTimeDetector _overTime = new();
 
     private int _activeIndex;
     private int _runStartIgt;
@@ -77,6 +79,13 @@ public sealed class RunTracker
         set => _fall.Options = value;
     }
 
+    /// <summary>Thresholds for attributing damage to poison, toxic or another effect ticking. Safe to change mid-run.</summary>
+    public DamageOverTimeOptions OverTimeOptions
+    {
+        get => _overTime.Options;
+        set => _overTime.Options = value;
+    }
+
     /// <summary>The most recent damage events, oldest first, for reviewing fall attribution.</summary>
     public IReadOnlyList<DamageEvent> RecentDamage => _recentDamage;
 
@@ -95,10 +104,13 @@ public sealed class RunTracker
     /// <summary>Every drop in health this run, falls included. What No Damage counts.</summary>
     public int TotalDamage => Sum(static s => s.Damage);
 
-    /// <summary>Damage the game dealt, with falls excluded. What No Hit counts.</summary>
+    /// <summary>Damage an enemy dealt, with falls and status ticks excluded. What No Hit counts.</summary>
     public int TotalHits => Sum(static s => s.Hits);
 
     public int TotalFallDamage => Sum(static s => s.FallDamage);
+
+    /// <summary>Damage attributed to poison, toxic or another effect ticking.</summary>
+    public int TotalTickDamage => Sum(static s => s.TickDamage);
     public int TotalDeaths => Sum(static s => s.Deaths);
     public int TotalSegmentIgtMs => Sum(static s => s.IgtMs);
 
@@ -186,7 +198,15 @@ public sealed class RunTracker
 
         if (characterPresent)
         {
-            if (inPlay) _fall.Observe(snapshot.IgtMs, snapshot.Y);
+            if (inPlay)
+            {
+                _fall.Observe(snapshot.IgtMs, snapshot.Y);
+
+                // Ahead of this tick's damage, so a run of poison ticks that has
+                // stopped is closed out before a fresh drop is offered to it.
+                _overTime.Advance(snapshot.IgtMs);
+            }
+
             TrackHealth(segment, snapshot, inPlay);
         }
         else
@@ -277,21 +297,35 @@ public sealed class RunTracker
 
     private void RecordDamage(SegmentResult segment, in GameSnapshot snapshot, bool fatal)
     {
+        // How much health this cost. Unmeasurable when there is no previous
+        // reading to subtract from, which happens only for a death seen without
+        // a live reading in front of it.
+        int? amount = _hasPrevHp ? Math.Max(0, _prevHp - snapshot.Hp) : null;
+
         var descent = _fall.DescentMetres(snapshot.IgtMs);
         var isFall = _fall.IsFall(descent);
 
         segment.Damage++;
         if (isFall) segment.FallDamage++;
 
-        if (_recentDamage.Count == RecentDamageCapacity) _recentDamage.RemoveAt(0);
-        _recentDamage.Add(new DamageEvent(
+        var damage = new DamageEvent(
             snapshot.IgtMs,
             _activeIndex < _splits.Count ? _splits[_activeIndex].Name : "",
             snapshot.Hp,
             snapshot.MaxHp,
+            amount ?? 0,
             fatal,
-            Math.Round(descent, 2),
-            isFall));
+            Math.Round(descent, 2))
+        {
+            Kind = isFall ? DamageKind.Fall : DamageKind.Pending,
+        };
+
+        // The fall detector has first refusal: the ground and a status effect are
+        // not competing explanations, and a landing is decided on the spot.
+        _overTime.Offer(damage, segment, amount, snapshot.IgtMs);
+
+        if (_recentDamage.Count == RecentDamageCapacity) _recentDamage.RemoveAt(0);
+        _recentDamage.Add(damage);
     }
 
     /// <summary>
@@ -311,6 +345,10 @@ public sealed class RunTracker
         _prevHp = 0;
         _prevDecreasing = false;
         _fall.Clear();
+
+        // Anything still waiting to be shown to be a status tick will never get
+        // its evidence now, and settles as a hit.
+        _overTime.Flush();
     }
 
     /// <summary>
@@ -334,10 +372,14 @@ public sealed class RunTracker
         var splits = new List<SplitState>(_splits.Count);
         foreach (var s in _splits)
         {
+            // Damage still waiting on a verdict is deliberately not carried over.
+            // A restored run has no history behind it for the pattern to be
+            // completed against, so those settle as hits — the safe direction.
             splits.Add(new SplitState(
                 s.Name, s.IsBoss, s.Completed,
                 s.Approach.IgtMs, s.Approach.Damage, s.Approach.FallDamage, s.Approach.Deaths,
-                s.Boss.IgtMs, s.Boss.Damage, s.Boss.FallDamage, s.Boss.Deaths));
+                s.Boss.IgtMs, s.Boss.Damage, s.Boss.FallDamage, s.Boss.Deaths,
+                s.Approach.TickDamage, s.Boss.TickDamage));
         }
 
         return new RunState(_route.Name, _runStartIgt, _currentIgt, _activeIndex, Phase, splits);
@@ -364,10 +406,12 @@ public sealed class RunTracker
             split.Approach.IgtMs = s.ApproachIgtMs;
             split.Approach.Damage = s.ApproachDamage;
             split.Approach.FallDamage = s.ApproachFallDamage;
+            split.Approach.TickDamage = s.ApproachTickDamage;
             split.Approach.Deaths = s.ApproachDeaths;
             split.Boss.IgtMs = s.BossIgtMs;
             split.Boss.Damage = s.BossDamage;
             split.Boss.FallDamage = s.BossFallDamage;
+            split.Boss.TickDamage = s.BossTickDamage;
             split.Boss.Deaths = s.BossDeaths;
             _splits.Add(split);
         }

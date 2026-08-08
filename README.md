@@ -111,14 +111,15 @@ The challenge decides what the overlay shows and what your runs are judged on.
 | Challenge | Judged on | Each split shows |
 |---|---|---|
 | **No Damage** | Every drop in health | Damage taken, against your best for that boss |
-| **No Hit** | Damage, **excluding falls** | Hits taken, against your best for that boss |
+| **No Hit** | Damage, **excluding falls and poison** | Hits taken, against your best for that boss |
 | **Deathless** | Deaths | Deaths, against your best for that boss |
 | **Speedrun** | Time | Split time, against your best for that boss |
 
-**No Damage and No Hit differ in one respect.** No Damage counts everything, so
-mistiming a drop costs you the run. No Hit ignores damage you took landing, so it
-measures only what the game dealt you. No Damage is the stricter of the two, and
-the one that needs no guesswork to be correct — see below.
+**No Damage and No Hit differ in two respects.** No Damage counts everything, so
+mistiming a drop or wading through a swamp costs you the run. No Hit sets aside
+damage you took landing and damage from poison, so it measures only what an enemy
+dealt you. No Damage is the stricter of the two, and the one that needs no
+guesswork to be correct — see below.
 
 Speedrun shows no hit counter at all: the run clock, and each split against its
 own best. Beating a split's best paints it green and paints the best red; falling
@@ -127,21 +128,30 @@ behind swaps them, so the better number is always the green one.
 A run is never failed automatically. Take a hit in a No Hit run and it keeps
 counting — finish the attempt and see how it compares.
 
-### How fall damage is told apart
+### How falls and poison are told apart
 
-By watching how far you dropped just before you lost health: a fall of more than
+**Falls, by watching how far you dropped just before you lost health:** more than
 3 metres inside the preceding half-second, by default.
 
-That is a measurement of your height, **not a reading of what damaged you**. The
-game does record that, but through a pointer chain this project has not found.
-So the detector will get things wrong at the edges — most obviously a real hit
-landing within a few frames of your feet touching down.
+**Poison and toxic, by the shape of the damage:** three or more small bites of
+about the same size, at least 1.2 seconds apart. Anything that really hurts is
+over the size threshold and counts as a hit the moment it lands; the spacing rule
+is what keeps a melee combo out, since several blows do land in a row but they
+land in well under a second. Because it takes a third bite to be sure, the first
+two wait a few seconds before being called — so a genuinely small hit shows up a
+little late rather than a poison tick showing up at all.
 
-Which is why you can check it. The control panel's **Fall damage** section lists
-recent damage with the drop measured for each and the call it made, and lets you
-move the thresholds or switch the whole thing off. Off means No Hit counts
-exactly what No Damage counts, which is the honest setting if it is misjudging
-your route.
+Neither of these is **a reading of what damaged you**. The game does record that,
+but through a pointer chain this project has not found. So both will get things
+wrong at the edges — most obviously a real hit landing within a few frames of
+your feet touching down, and anything else that ticks away at you slowly, like
+standing in a fire, being called poison.
+
+Which is why you can check them. The control panel's **What counts as a hit**
+section lists recent damage with the health each cost, the drop measured, and the
+call it made, and lets you move the thresholds or switch either one off. Off
+means No Hit counts exactly what No Damage counts, which is the honest setting if
+it is misjudging your route.
 
 ### Personal bests
 
@@ -217,13 +227,14 @@ executable, or **Open log file** on the tray icon.
 | Timer runs but nothing counts | Check **Health** under **Now** on the control panel. Real numbers while you play means the reading works; `0 / 0` while standing in a level means the memory offsets are wrong for your game version, and no amount of playing will move the counters. Tested against **1.15.2.0**; older patches move these offsets |
 | A boss kill did not split | `http://127.0.0.1:8777/api/diagnostics?flag=<id>` reports every step of the lookup. Split manually with `Ctrl+Alt+D` meanwhile |
 | Hotkeys do nothing | Another app may own the combination; the control panel marks unbound ones |
-| A hit was counted as a fall, or missed | **Fall damage → Recent damage** on the control panel shows what was called and why. Only No Hit is affected |
+| A hit was counted as a fall or as poison, or missed | **What counts as a hit → Recent damage** on the control panel shows what was called and why, and what each cost. Only No Hit is affected |
+| Poison still counts as hits | Check the `HP` column against **Bites no bigger than**. A tick larger than that ceiling counts as a hit; raise it until they stop |
 
 Known limitations:
 
-- **Fall damage is detected by a heuristic, not read from the game.** No Hit is
-  only as good as that guess. See [How fall damage is told
-  apart](#how-fall-damage-is-told-apart); No Damage is unaffected.
+- **Falls and poison are detected by heuristics, not read from the game.** No Hit
+  is only as good as those guesses. See [How falls and poison are told
+  apart](#how-falls-and-poison-are-told-apart); No Damage is unaffected.
 - **The approach-vs-boss breakdown is recorded but not displayed**, because
   detecting when a boss fight is active needs a memory offset that has not been
   found, which leaves it empty in a real game.

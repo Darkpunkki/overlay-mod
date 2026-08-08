@@ -244,20 +244,29 @@ app.MapPost("/api/appearance/reset", (AppearanceStore store) =>
     return Results.Ok(new { version = store.Version, settings = applied });
 });
 
-// How damage is classified. Fall detection is a heuristic over player height, so
-// its thresholds are settings rather than constants — the only way to know
-// whether they are right is to watch them against a real playthrough.
+// How damage is classified. Both detectors are heuristics — one over player
+// height, one over the size and rhythm of repeated small drops — so their
+// thresholds are settings rather than constants. The only way to know whether
+// they are right is to watch them against a real playthrough.
+//
+// Either half of the body may be omitted, meaning "leave that one as it is".
 app.MapGet("/api/tracking", (TrackingSettingsStore store) =>
-    Results.Ok(new { fallDamage = store.FallDamage }));
+    Results.Ok(new { fallDamage = store.FallDamage, damageOverTime = store.DamageOverTime }));
 
-app.MapPost("/api/tracking", (FallDamageOptions fallDamage, TrackingSettingsStore store) =>
-    Results.Ok(new { fallDamage = store.Update(fallDamage) }));
+app.MapPost("/api/tracking", (TrackingUpdate body, TrackingSettingsStore store) =>
+{
+    var (fall, overTime) = store.Update(body.FallDamage, body.DamageOverTime);
+    return Results.Ok(new { fallDamage = fall, damageOverTime = overTime });
+});
 
 app.MapPost("/api/tracking/reset", (TrackingSettingsStore store) =>
-    Results.Ok(new { fallDamage = store.Reset() }));
+{
+    var (fall, overTime) = store.Reset();
+    return Results.Ok(new { fallDamage = fall, damageOverTime = overTime });
+});
 
-// The recent damage events with the descent measured for each, so the fall
-// detector's calls can be reviewed rather than taken on trust. This is the
+// The recent damage events, with the size and the descent measured for each, so
+// the detectors' calls can be reviewed rather than taken on trust. This is the
 // counterpart to the thresholds above: change one, play, read this back.
 app.MapGet("/api/hits", (RunController rc) => Results.Ok(new
 {
@@ -267,8 +276,10 @@ app.MapGet("/api/hits", (RunController rc) => Results.Ok(new
         split = e.SplitName,
         hp = e.Hp,
         maxHp = e.MaxHp,
+        damage = e.Damage,
         fatal = e.Fatal,
         descentMetres = e.DescentMetres,
+        kind = e.Kind.ToString(),
         countedAsFall = e.CountedAsFall,
     }),
 }));
@@ -345,3 +356,12 @@ finally
 
 /// <summary>Body of a route-selection request.</summary>
 internal sealed record SelectRequest(string Route, string Challenge);
+
+/// <summary>
+/// Body of a tracking-settings update. Both halves are optional: the control
+/// page edits one card at a time, and sending only the card that changed keeps
+/// two people with the page open from overwriting each other's other card.
+/// </summary>
+internal sealed record TrackingUpdate(
+    FallDamageOptions? FallDamage,
+    DamageOverTimeOptions? DamageOverTime);

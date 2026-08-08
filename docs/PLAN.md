@@ -25,6 +25,7 @@ they will be filled in as each becomes next.
 | Event-flag reads (boss defeats) | **Implemented, never verified against the game** |
 | Boss HP / boss-fight-active | **Not found.** No offset, no candidate |
 | Fall-damage classification | **Heuristic over player height, unverified live** (0.2.0) |
+| Poison / toxic classification | **Heuristic over the size and rhythm of repeated drops, unverified live** (0.2.2) |
 | `RunTracker` state machine | **Working**, unit tested |
 | Host, SSE stream, fake source | **Working** (Milestone 3), 17 unit tests pass |
 | Overlay page | **Renders real data**; visual design pass is Milestone 4 |
@@ -144,6 +145,7 @@ work that does not touch it.
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
 | 7 | **Fall-damage classification** | Take a survivable fall, then an ordinary hit, and read `GET /api/hits` back. See LIVE-TESTING 4.7 | The whole of No Hit rests on it, and the thresholds can only be set against a real game |
 | 8 | **Deaths register at all** | Die three times in one split under Deathless; the count should read three | Was broken before 0.2.0 and the fix is unproven live — see the decision on latching below |
+| 9 | **Poison / toxic classification** | Get poisoned under No Hit, let it run its course, then read `GET /api/hits` back. See LIVE-TESTING 4.8 | The default bite size (40 HP) is a guess at what a tick actually costs. Too low and every tick is a hit again; too high and real chip damage disappears |
 
 **[docs/LIVE-TESTING.md](LIVE-TESTING.md) is the walkthrough for this** — how to
 launch offline without EAC, and each check written as a pass/fail with what to
@@ -195,8 +197,9 @@ Decisions not yet made. Flagged here rather than silently assumed.
   is shown.
 - **Damage and hits are counted separately, and both are stored.** "Damage" is
   every drop in health; "hits" is damage minus what the fall detector attributed
-  to landing. Deriving one from the other at display time was the alternative and
-  is wrong: which one a challenge is judged on changes, but both are facts about
+  to landing and minus what the damage-over-time detector attributed to a status
+  effect. Deriving one from the other at display time was the alternative and is
+  wrong: which one a challenge is judged on changes, but both are facts about
   what happened, so a run recorded under No Damage stays comparable against a No
   Hit best.
 - **Fall damage is told apart by height, not by damage source.** Dark Souls III
@@ -209,6 +212,28 @@ Decisions not yet made. Flagged here rather than silently assumed.
   keeps the descent it measured so `GET /api/hits` can be read back after a run.
   *The SpEffect read replaces it when the offset is found — same seam, different
   classifier — and is worth doing in the same session as the boss-HP hunt.*
+- **Poison and toxic are told apart by shape, not by cause** (0.2.2), and behind
+  the same wall for the same reason: the game knows perfectly well that you are
+  poisoned, and reading it would be exact, but it is another unverified pointer
+  chain whose layout moves between patches. `DamageOverTimeDetector` instead
+  looks for what a tick *looks like* — three or more small drops of about the
+  same size, spaced between 1.2 s and a configurable ceiling apart. The floor on
+  spacing is load-bearing: several similar blows do land in a row, but a combo
+  lands in well under a second, and without that floor one would be classified as
+  poison.
+
+  **A small drop is held rather than counted** until the third one settles it.
+  Counting it and retracting later was the alternative and reads as a broken
+  overlay — a minute of poison would drive the hit counter up and back down every
+  few seconds. Holding costs a few seconds of latency on a genuinely small hit,
+  which is the better error: it appears late rather than not at all. Everything
+  still unresolved when the readings break — a loading screen, a reload, a
+  checkpoint being restored — settles as a **hit**, because an unproven tick is a
+  hit we have not finished doubting, and that is the only direction that cannot
+  make an invalid run look clean.
+
+  It cannot distinguish poison from standing in a fire, and it says so on the
+  control page. *The same SpEffect read that fixes fall damage fixes this too.*
 - **No counter may depend on a memory read whose only job is to corroborate
   another one.** 0.2.0 required `MaxHp > 0` before it would look at health at
   all, as proof the data module had been populated. It was a new dependency on

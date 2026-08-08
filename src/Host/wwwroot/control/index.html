@@ -119,22 +119,21 @@
     </details>
 
     <details class="card" id="cardFall">
-      <summary class="card__head"><h2>Fall damage</h2></summary>
+      <summary class="card__head"><h2>What counts as a hit</h2></summary>
       <p class="hint">
-        Only the <strong>No Hit</strong> challenge uses this. It tells fall damage
-        apart by watching how far you dropped just before losing health — a
-        heuristic, not a reading from the game, so the thresholds are yours to move.
-        Every other challenge counts all damage regardless.
+        Only the <strong>No Hit</strong> challenge uses any of this. Two things get
+        set aside: what the ground did to you, and what poison did. Both are worked
+        out from health and position over time rather than read from the game, so
+        the thresholds are yours to move. Every other challenge counts all damage
+        regardless.
       </p>
+
+      <h3 class="card__sub">Falls</h3>
 
       <label class="check">
         <input type="checkbox" id="fdEnabled">
         <span>Exclude fall damage from No&nbsp;Hit</span>
       </label>
-      <p class="hint">
-        Turn this off and No Hit counts exactly what No Damage counts. That is the
-        honest setting if the detector is guessing wrong on your route.
-      </p>
 
       <div class="fields">
         <label class="field">
@@ -150,15 +149,45 @@
         </label>
       </div>
 
+      <h3 class="card__sub">Poison, toxic and anything else that ticks</h3>
+
+      <label class="check">
+        <input type="checkbox" id="dotEnabled">
+        <span>Exclude damage over time from No&nbsp;Hit</span>
+      </label>
+      <p class="hint">
+        Recognised by shape, not by cause: three or more small bites of about the
+        same size, spaced at least 1.2 s apart. A combo lands far quicker than
+        that, and anything that really hurts is over the size below. Because it
+        takes a third bite to be sure, the first two wait a few seconds before
+        being called — so a genuinely small hit shows up late rather than a poison
+        tick showing up at all. Standing in a fire will be called poison too.
+      </p>
+
+      <div class="fields">
+        <label class="field">
+          <span class="field__label">Bites no bigger than</span>
+          <input type="range" id="dotMaxTick" min="5" max="200" step="5">
+          <output class="field__value" id="dotMaxTickOut">40 HP</output>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Repeating at most every</span>
+          <input type="range" id="dotInterval" min="1500" max="10000" step="250">
+          <output class="field__value" id="dotIntervalOut">4000 ms</output>
+        </label>
+      </div>
+
       <div class="row">
         <button class="btn btn--quiet" id="fdRefresh" type="button">Refresh recent damage</button>
         <button class="btn btn--quiet" id="fdReset" type="button">Reset to defaults</button>
       </div>
 
       <p class="hint">
-        Recent damage, newest first, with the drop measured for each. This is how
-        you check the detector rather than trust it: if a real hit is showing as a
-        fall, raise the distance or shorten the window.
+        Recent damage, newest first, with the health lost and the drop measured for
+        each. This is how you check the detectors rather than trust them: if a real
+        hit is showing as a fall, raise the distance or shorten the window; if one
+        is showing as poison, lower the bite size.
       </p>
       <div class="events" id="fdEvents"></div>
     </details>

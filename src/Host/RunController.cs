@@ -110,9 +110,9 @@ public sealed class RunController
     }
 
     /// <summary>
-    /// The most recent damage events, newest first, with the descent that decided
-    /// whether each was a fall. This is how the fall thresholds get tuned: take a
-    /// run, then read back what the detector actually called.
+    /// The most recent damage events, newest first, with the size and the descent
+    /// that decided the verdict on each. This is how the thresholds get tuned:
+    /// take a run, then read back what the detectors actually called.
     /// </summary>
     public IReadOnlyList<DamageEvent> RecentDamage
     {
@@ -169,9 +169,10 @@ public sealed class RunController
         lock (_gate)
         {
             // Picked up every tick rather than at construction, so editing the
-            // fall thresholds on the control page takes effect on the run in
+            // thresholds on the control page takes effect on the run in
             // progress — which is the only run anyone is ever tuning against.
             _tracker.FallOptions = _tracking.FallDamage;
+            _tracker.OverTimeOptions = _tracking.DamageOverTime;
 
             // A fresh source generation - a re-attach, or the fake script looping -
             // means the timeline restarted. That is not automatically a new run,
@@ -331,8 +332,10 @@ public sealed class RunController
         _parked.Clear();
 
         _log.LogInformation(
-            "Run finished: {Damage} damage ({Falls} from falls), {Deaths} deaths, {Time}ms.",
-            _tracker.TotalDamage, _tracker.TotalFallDamage, _tracker.TotalDeaths, _tracker.RunIgtMs);
+            "Run finished: {Damage} damage ({Falls} from falls, {Ticks} from status effects) " +
+            "= {Hits} hits, {Deaths} deaths, {Time}ms.",
+            _tracker.TotalDamage, _tracker.TotalFallDamage, _tracker.TotalTickDamage,
+            _tracker.TotalHits, _tracker.TotalDeaths, _tracker.RunIgtMs);
     }
 
     /// <summary>

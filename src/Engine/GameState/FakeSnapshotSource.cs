@@ -156,12 +156,13 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
     /// A ~100 second scripted run over three boss splits, exercising everything
     /// the tracker and overlay need to display: loading screens, approach damage,
     /// estus heals, the approach-to-boss transition, a death and reload mid-run,
-    /// a retry, a fall that costs health, and boss-defeat flags driving
-    /// auto-splits through to a finish.
+    /// a retry, a fall that costs health, a stretch of poison, and boss-defeat
+    /// flags driving auto-splits through to a finish.
     ///
-    /// Expected totals for one pass: 10 damage, of which 1 is a fall — so 9 hits —
-    /// 1 death, and all three splits completed. The fall is what makes the
-    /// difference between No Damage and No Hit visible without the game.
+    /// Expected totals for one pass: 14 damage, of which 1 is a fall and 4 are
+    /// poison ticks — so 9 hits — 1 death, and all three splits completed. The
+    /// fall and the poison are what make the difference between No Damage and
+    /// No Hit visible without the game.
     /// </summary>
     public static readonly IReadOnlyList<FakeKeyframe> DemoRun = new[]
     {
@@ -195,7 +196,15 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
         new FakeKeyframe(80_000, Y: 14),                         // up on a ledge
         new FakeKeyframe(82_000, Hp: 600, Y: 0),                 // landed hard -> fall damage, not a hit
         new FakeKeyframe(84_000, Hp: 520),                       // hit
+
+        // Poisoned in the swamp: small, even bites a couple of seconds apart.
+        // The first two are held until the third proves the pattern, so the hit
+        // counter never moves for any of them.
+        new FakeKeyframe(85_500, Hp: 500),                       // poison tick
+        new FakeKeyframe(88_000, Hp: 480),                       // poison tick
         new FakeKeyframe(90_000, BossFightActive: true),
+        new FakeKeyframe(90_500, Hp: 460),                       // poison tick -> pattern confirmed
+        new FakeKeyframe(93_000, Hp: 440),                       // poison tick
         new FakeKeyframe(95_000, Hp: 310),                       // hit
         new FakeKeyframe(100_000, SetFlag: 13100800),            // defeated -> run finished
     };

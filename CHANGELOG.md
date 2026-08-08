@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.2.2
+
+### Fixed
+
+- **Poison and toxic no longer count as hits.** A No Hit run through a swamp
+  used to pick up a hit every few seconds for as long as the effect lasted, and
+  a dozen phantom hits is the difference between a run you keep and a run you
+  throw away. Poison is still damage, so **No Damage counts it exactly as
+  before** — only No Hit was ever meant to disagree.
+
+  Like fall damage, this is worked out rather than read from the game: three or
+  more small bites of about the same size, at least 1.2 seconds apart, is a
+  status effect ticking. Anything that really hurts is over the size threshold
+  and counts as a hit the moment it lands. The spacing rule is what keeps a
+  melee combo out — several blows do arrive in a row, but they arrive in well
+  under a second.
+
+  Because it takes a third bite to be sure, the first two wait a few seconds
+  before being called. A genuinely small hit therefore shows up a little late,
+  rather than a poison tick showing up at all. It cannot tell poison from
+  standing in a fire; both are called damage over time.
+
+### Added
+
+- **Both thresholds are on the control page**, under **What counts as a hit**
+  (which is what the *Fall damage* card is now called, since it covers two
+  things). Set the bite size and the spacing, or switch the whole thing off and
+  have No Hit count poison again.
+
+- **Recent damage now shows how much health each event cost**, alongside the
+  drop already measured for it, and names the verdict reached: hit, fall, over
+  time, or still deciding. That list is how these thresholds get set — take a
+  run through a swamp, then read back what was actually called.
+
+### Notes for anyone upgrading
+
+Nothing to do. Settings tuned in 0.2.1 are carried over, personal bests are
+untouched, and a run parked mid-session resumes with its counts intact — poison
+already counted as a hit before this release stays counted as one, because
+resuming does not rewrite history. Start a new run for a clean number.
+
 ## 0.2.1
 
 Two counting bugs. **If 0.2.0 counted nothing for you while the timer kept

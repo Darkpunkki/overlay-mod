@@ -39,7 +39,7 @@
   // point of this release.
   const CHALLENGE_NOTES = {
     NoDamage: "Counts every drop in health, fall damage included. Nothing is guessed at.",
-    NoHit: "Counts damage the game dealt you. Landing damage is excluded — see Fall damage below.",
+    NoHit: "Counts damage an enemy dealt you. Falls and poison are excluded — see What counts as a hit, below.",
     Deathless: "Counts deaths. Damage is still recorded underneath, it just is not shown.",
     Speedrun: "Ranked on time. No hit counter at all: the run clock, and each split against its best.",
   };
@@ -91,10 +91,20 @@
     { key: "windowMs", input: "fdWindow", out: "fdWindowOut", number: true, integer: true, format: (v) => `${Math.round(v)} ms` },
   ];
 
+  // Poison, toxic and anything else that ticks. Shares the endpoint with FALL,
+  // but is posted on its own so editing one card cannot clobber the other.
+  const OVER_TIME = [
+    { key: "enabled", input: "dotEnabled", boolean: true },
+    { key: "maxTickDamage", input: "dotMaxTick", out: "dotMaxTickOut", number: true, integer: true, format: (v) => `${Math.round(v)} HP` },
+    { key: "maxIntervalMs", input: "dotInterval", out: "dotIntervalOut", number: true, integer: true, format: (v) => `${Math.round(v)} ms` },
+  ];
+
   let appearance = null;
   let appearanceTimer = 0;
   let fallDamage = null;
   let fallTimer = 0;
+  let overTime = null;
+  let overTimeTimer = 0;
 
   function toast(message) {
     dom.toast.textContent = message;
@@ -306,7 +316,7 @@
   async function saveFallDamage() {
     const sent = fallDamage;
     try {
-      const { fallDamage: applied } = await post("/api/tracking", sent);
+      const { fallDamage: applied } = await post("/api/tracking", { fallDamage: sent });
       fallDamage = applied;
       reconcile(FALL, sent, applied);
     } catch (err) {
@@ -314,10 +324,23 @@
     }
   }
 
-  async function loadFallDamage() {
-    const { fallDamage: settings } = await (await fetch("/api/tracking")).json();
-    fallDamage = settings;
-    show(FALL, settings);
+  async function saveOverTime() {
+    const sent = overTime;
+    try {
+      const { damageOverTime: applied } = await post("/api/tracking", { damageOverTime: sent });
+      overTime = applied;
+      reconcile(OVER_TIME, sent, applied);
+    } catch (err) {
+      toast(`Could not save poison settings: ${err.message}`);
+    }
+  }
+
+  async function loadTracking() {
+    const { fallDamage: fall, damageOverTime: dot } = await (await fetch("/api/tracking")).json();
+    fallDamage = fall;
+    overTime = dot;
+    show(FALL, fall);
+    show(OVER_TIME, dot);
   }
 
   for (const field of APPEARANCE) {
@@ -337,6 +360,16 @@
       onEdit(field, input,
         () => fallDamage, (next) => { fallDamage = next; },
         () => { clearTimeout(fallTimer); fallTimer = setTimeout(saveFallDamage, 150); });
+    });
+  }
+
+  for (const field of OVER_TIME) {
+    const input = el(field.input);
+    if (!input) continue;
+    input.addEventListener(field.boolean ? "change" : "input", () => {
+      onEdit(field, input,
+        () => overTime, (next) => { overTime = next; },
+        () => { clearTimeout(overTimeTimer); overTimeTimer = setTimeout(saveOverTime, 150); });
     });
   }
 
@@ -368,16 +401,28 @@
 
   el("fdReset").addEventListener("click", async () => {
     try {
-      const { fallDamage: settings } = await post("/api/tracking/reset");
-      fallDamage = settings;
-      show(FALL, settings);
-      toast("Fall settings reset");
+      const { fallDamage: fall, damageOverTime: dot } = await post("/api/tracking/reset");
+      fallDamage = fall;
+      overTime = dot;
+      show(FALL, fall);
+      show(OVER_TIME, dot);
+      toast("Hit-detection settings reset");
     } catch (err) {
       toast(`Reset failed: ${err.message}`);
     }
   });
 
-  // --- recent damage, for checking the fall detector's calls ---
+  // --- recent damage, for checking the detectors' calls ---
+
+  // Kind comes from the engine's enum. "Pending" means small enough to be a
+  // poison tick and still waiting on the bite after it, which is worth naming
+  // rather than showing as a hit that may be about to disappear.
+  const VERDICTS = {
+    Fall: "fall",
+    OverTime: "over time",
+    Pending: "deciding…",
+    Hit: "hit",
+  };
 
   async function loadDamageEvents() {
     let events = [];
@@ -400,14 +445,17 @@
     dom.fdEvents.replaceChildren(...events.map((e) => {
       const row = document.createElement("div");
       row.className = "event";
-      row.classList.toggle("is-fall", e.countedAsFall);
+      row.classList.toggle("is-fall", e.kind === "Fall");
+      row.classList.toggle("is-overtime", e.kind === "OverTime");
+      row.classList.toggle("is-pending", e.kind === "Pending");
       row.classList.toggle("is-fatal", e.fatal);
 
       for (const [text, cls] of [
         [formatTime(e.igtMs), "event__time"],
         [e.split || "—", "event__split"],
+        [`${e.damage} HP`, "event__size"],
         [`${e.descentMetres.toFixed(1)} m`, "event__drop"],
-        [e.fatal ? "death" : (e.countedAsFall ? "fall" : "hit"), "event__verdict"],
+        [e.fatal ? "death" : (VERDICTS[e.kind] ?? "hit"), "event__verdict"],
       ]) {
         const cell = document.createElement("span");
         cell.className = cls;
@@ -540,5 +588,5 @@
   loadAbout().catch(() => { /* the version is a nicety, not a requirement */ });
   loadHotkeys().catch(() => { /* hotkeys are optional; the buttons still work */ });
   loadAppearance().catch((err) => toast(`Could not load appearance: ${err.message}`));
-  loadFallDamage().catch((err) => toast(`Could not load fall settings: ${err.message}`));
+  loadTracking().catch((err) => toast(`Could not load hit-detection settings: ${err.message}`));
 })();
