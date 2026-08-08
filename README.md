@@ -133,13 +133,14 @@ counting — finish the attempt and see how it compares.
 **Falls, by watching how far you dropped just before you lost health:** more than
 3 metres inside the preceding half-second, by default.
 
-**Poison and toxic, by the shape of the damage:** three or more small bites of
-about the same size, at least 1.2 seconds apart. Anything that really hurts is
-over the size threshold and counts as a hit the moment it lands; the spacing rule
-is what keeps a melee combo out, since several blows do land in a row but they
-land in well under a second. Because it takes a third bite to be sure, the first
-two wait a few seconds before being called — so a genuinely small hit shows up a
-little late rather than a poison tick showing up at all.
+**Poison and toxic, by the shape of the damage:** they tick once a second, every
+second, for a bite proportional to your maximum health — a metronome, which
+combat never is. So the detector looks for four or more small bites of about the
+same size at gaps about the same as each other. Anything that really hurts is
+over the size ceiling (8% of your health by default) and counts as a hit the
+moment it lands. Because it takes a fourth bite to see the rhythm, the first
+three wait a couple of seconds before being called — so a genuinely small hit
+shows up a little late rather than a poison tick showing up at all.
 
 Neither of these is **a reading of what damaged you**. The game does record that,
 but through a pointer chain this project has not found. So both will get things
@@ -228,7 +229,7 @@ executable, or **Open log file** on the tray icon.
 | A boss kill did not split | `http://127.0.0.1:8777/api/diagnostics?flag=<id>` reports every step of the lookup. Split manually with `Ctrl+Alt+D` meanwhile |
 | Hotkeys do nothing | Another app may own the combination; the control panel marks unbound ones |
 | A hit was counted as a fall or as poison, or missed | **What counts as a hit → Recent damage** on the control panel shows what was called and why, and what each cost. Only No Hit is affected |
-| Poison still counts as hits | Check the `HP` column against **Bites no bigger than**. A tick larger than that ceiling counts as a hit; raise it until they stop |
+| Poison still counts as hits | The line above the damage list says what the ceiling works out to in HP. Compare it against the `HP` column and raise **Bites no bigger than** past your ticks. Make sure you are on **0.2.3 or later** — in 0.2.2 this never worked at all |
 
 Known limitations:
 

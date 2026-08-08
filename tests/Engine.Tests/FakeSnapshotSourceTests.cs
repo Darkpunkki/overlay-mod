@@ -130,9 +130,9 @@ public class FakeSnapshotSourceTests
         var tracker = RunDemo(untilMs: 105_000);
 
         Assert.Equal(RunPhase.Finished, tracker.Phase);
-        Assert.Equal(14, tracker.TotalDamage);
+        Assert.Equal(18, tracker.TotalDamage);
         Assert.Equal(1, tracker.TotalFallDamage);
-        Assert.Equal(4, tracker.TotalTickDamage);
+        Assert.Equal(8, tracker.TotalTickDamage);
         Assert.Equal(9, tracker.TotalHits);
         Assert.Equal(1, tracker.TotalDeaths);
         Assert.All(tracker.Splits, s => Assert.True(s.Completed));
@@ -150,9 +150,9 @@ public class FakeSnapshotSourceTests
         Assert.Equal(1, tracker.TotalFallDamage);
         Assert.Equal(1, tracker.Splits[2].Approach.FallDamage);
 
-        // The fall, one real hit, and the first two poison ticks.
-        Assert.Equal(4, tracker.Splits[2].Approach.Damage);
-        Assert.Equal(2, tracker.Splits[2].Approach.TickDamage);
+        // The fall, one real hit, and the five poison ticks before the fight.
+        Assert.Equal(7, tracker.Splits[2].Approach.Damage);
+        Assert.Equal(5, tracker.Splits[2].Approach.TickDamage);
         Assert.Equal(1, tracker.Splits[2].Approach.Hits);
     }
 
@@ -161,13 +161,14 @@ public class FakeSnapshotSourceTests
     {
         var tracker = RunDemo(untilMs: 105_000);
 
-        // Four ticks, two either side of the boss-fight transition. Every one of
-        // them costs health and none of them is a hit.
-        Assert.Equal(4, tracker.TotalTickDamage);
-        Assert.Equal(2, tracker.Splits[2].Approach.TickDamage);
-        Assert.Equal(2, tracker.Splits[2].Boss.TickDamage);
+        // Eight ticks at the game's real one-a-second cadence, spanning the
+        // boss-fight transition. Every one of them costs health and none of them
+        // is a hit.
+        Assert.Equal(8, tracker.TotalTickDamage);
+        Assert.Equal(5, tracker.Splits[2].Approach.TickDamage);
+        Assert.Equal(3, tracker.Splits[2].Boss.TickDamage);
 
-        // The third tick is what proves the pattern, so the two before it are
+        // The fourth tick is what proves the rhythm, so the three before it are
         // reclassified rather than left waiting.
         Assert.Equal(0, tracker.Splits[2].Approach.PendingDamage);
         Assert.Equal(0, tracker.Splits[2].Boss.PendingDamage);

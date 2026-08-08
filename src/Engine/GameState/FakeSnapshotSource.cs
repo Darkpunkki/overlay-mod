@@ -159,7 +159,7 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
     /// a retry, a fall that costs health, a stretch of poison, and boss-defeat
     /// flags driving auto-splits through to a finish.
     ///
-    /// Expected totals for one pass: 14 damage, of which 1 is a fall and 4 are
+    /// Expected totals for one pass: 18 damage, of which 1 is a fall and 8 are
     /// poison ticks — so 9 hits — 1 death, and all three splits completed. The
     /// fall and the poison are what make the difference between No Damage and
     /// No Hit visible without the game.
@@ -197,15 +197,20 @@ public sealed class FakeSnapshotSource : ISnapshotSource, IFlagSource
         new FakeKeyframe(82_000, Hp: 600, Y: 0),                 // landed hard -> fall damage, not a hit
         new FakeKeyframe(84_000, Hp: 520),                       // hit
 
-        // Poisoned in the swamp: small, even bites a couple of seconds apart.
-        // The first two are held until the third proves the pattern, so the hit
-        // counter never moves for any of them.
-        new FakeKeyframe(85_500, Hp: 500),                       // poison tick
-        new FakeKeyframe(88_000, Hp: 480),                       // poison tick
-        new FakeKeyframe(90_000, BossFightActive: true),
-        new FakeKeyframe(90_500, Hp: 460),                       // poison tick -> pattern confirmed
-        new FakeKeyframe(93_000, Hp: 440),                       // poison tick
-        new FakeKeyframe(95_000, Hp: 310),                       // hit
+        // Poisoned in the swamp. Once a second, every second, for the same bite:
+        // the real cadence, so the demo exercises what the detector is actually
+        // looking for. The first three are held until the fourth proves the
+        // rhythm, so the hit counter never moves for any of them.
+        new FakeKeyframe(85_000, Hp: 500),                       // poison tick
+        new FakeKeyframe(86_000, Hp: 480),                       // poison tick
+        new FakeKeyframe(87_000, Hp: 460),                       // poison tick
+        new FakeKeyframe(88_000, Hp: 440),                       // poison tick -> rhythm confirmed
+        new FakeKeyframe(89_000, Hp: 420),                       // poison tick
+        new FakeKeyframe(89_500, BossFightActive: true),
+        new FakeKeyframe(90_000, Hp: 400),                       // poison tick
+        new FakeKeyframe(91_000, Hp: 380),                       // poison tick
+        new FakeKeyframe(92_000, Hp: 360),                       // poison tick
+        new FakeKeyframe(95_000, Hp: 230),                       // hit
         new FakeKeyframe(100_000, SetFlag: 13100800),            // defeated -> run finished
     };
 }

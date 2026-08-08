@@ -14,49 +14,70 @@ namespace OverlayMod.Engine.Tracking;
 /// new is being staked on one. This works from health over time, which is
 /// already read and already verified.
 ///
-/// **What a tick looks like.** Small, repeated, slow and even. Three drops of
-/// about the same small size, spaced between <see cref="MinIntervalMs"/> and
-/// <see cref="DamageOverTimeOptions.MaxIntervalMs"/> apart, are a status effect;
-/// anything bigger is a hit the moment it lands. The lower bound on spacing is
-/// what keeps a melee combo out: several blows of similar size do arrive in a
-/// row, but they arrive in well under a second.
+/// **What a tick looks like: a metronome.** Poison and toxic in Dark Souls III
+/// tick once a second, every second, for a proportional bite out of maximum
+/// health. Combat is never like that — blows land irregularly and for wildly
+/// different amounts — so the discriminating evidence is the *evenness*, not the
+/// speed and not the size. Four bites of about the same size, at gaps that are
+/// about the same as each other, is a status effect.
 ///
-/// **Why the first two ticks are held rather than counted.** Nothing can be
-/// called a tick until a second one follows it, so a small drop is parked as
+/// **This is the second design.** 0.2.2 asked instead for gaps between 1.2 s and
+/// 4 s and bites under 40 HP, which is three conjunctive guesses about a game
+/// nobody here had measured. Real ticks arrive at 1 s — under the floor — so
+/// every one of them was rejected before its size was even considered, and the
+/// feature was a silent no-op that no setting could rescue. Two lessons are
+/// built in here: **a bound whose wrong value disables the feature must not be
+/// hard-coded** (hence <see cref="DamageOverTimeOptions.MaxIntervalMs"/> being
+/// settable and <see cref="MinIntervalMs"/> being far below anything real), and
+/// **regularity does the work that guessed magnitudes cannot**.
+///
+/// **Why the first three ticks are held rather than counted.** Nothing can be
+/// called a tick until the pattern shows itself, so a small drop is parked as
 /// <see cref="DamageKind.Pending"/> — counted as damage, but not yet as a hit —
 /// until it either joins a run of ticks or ages out into a hit. Held rather than
 /// counted-then-retracted because the alternative flickers: a minute of poison
-/// would drive the hit counter up and back down every few seconds, which reads
-/// as a broken overlay. A real hit that lands under the size threshold is late
-/// to appear by a few seconds; it does still appear.
+/// would drive the hit counter up and back down every second, which reads as a
+/// broken overlay. A real hit that lands under the size ceiling is late to
+/// appear by a couple of seconds; it does still appear.
 ///
-/// **What it will get wrong.** Any small, slow, regular damage that is not a
+/// **What it will get wrong.** Any small, even, repeating damage that is not a
 /// status effect — standing in a fire, a trap on a loop — is called a tick.
-/// Erring the other way, three identical light hits spaced a couple of seconds
-/// apart go uncounted. Every event keeps the size measured for it and the
-/// verdict reached, so both are visible on the control page rather than merely
-/// suspected.
+/// Erring the other way, four identical light hits at four identical intervals
+/// go uncounted. Every event keeps the size measured for it and the verdict
+/// reached, so both are visible on the control page rather than merely suspected.
 /// </summary>
 public sealed class DamageOverTimeDetector
 {
     /// <summary>
     /// How many ticks it takes to believe in a status effect rather than a
-    /// coincidence. Two is not enough: an enemy landing the same attack twice a
-    /// couple of seconds apart would qualify, and hiding real hits is the one
-    /// failure this must not have.
+    /// coincidence. Four gives three gaps, which is enough to see whether they
+    /// are even; three would give two, and two gaps agreeing is not yet a
+    /// rhythm. Hiding real hits is the one failure this must not have.
     /// </summary>
-    private const int MinTicks = 3;
+    private const int MinTicks = 4;
 
     /// <summary>
-    /// The fastest two drops may arrive and still be a status effect. A combo,
-    /// a repeating trap and a spell being spammed all land far quicker than this.
+    /// A sanity bound only. Poison and toxic tick at 1 s and this sits far below
+    /// that on purpose — 0.2.2 put the floor *above* the real cadence and
+    /// disabled the whole feature. The evenness test below, not this number, is
+    /// what keeps a flurry of blows out.
     /// </summary>
-    private const int MinIntervalMs = 1200;
+    private const int MinIntervalMs = 250;
 
     /// <summary>How much two ticks may differ in size and still be the same effect.</summary>
     private const double SizeTolerance = 0.25;
 
-    private readonly record struct Tick(DamageEvent Event, SegmentResult Segment, int Damage, int TimeMs);
+    /// <summary>
+    /// How much two gaps may differ and still count as even. The absolute floor
+    /// absorbs polling jitter: at 30 Hz a tick is seen up to 33 ms late, so two
+    /// readings of the same 1 s cadence can differ by that much before anything
+    /// has actually changed.
+    /// </summary>
+    private const double GapTolerance = 0.25;
+    private const int GapToleranceFloorMs = 120;
+
+    private readonly record struct Tick(
+        DamageEvent Event, SegmentResult Segment, int Damage, int TimeMs, int GapMs);
 
     private readonly List<Tick> _chain = new(8);
     private bool _confirmed;
@@ -72,25 +93,40 @@ public sealed class DamageOverTimeDetector
     /// Health lost, or null when there was no previous reading to subtract from.
     /// An unmeasured drop cannot be shown to be small, so it is a hit.
     /// </param>
-    public void Offer(DamageEvent damage, SegmentResult segment, int? damageAmount, int timeMs)
+    /// <param name="healthScale">
+    /// What the player's maximum health is taken to be, for turning the
+    /// percentage ceiling into an amount. See <see cref="RunTracker"/> for why
+    /// this is not simply <c>MaxHp</c>.
+    /// </param>
+    public void Offer(
+        DamageEvent damage, SegmentResult segment, int? damageAmount, int timeMs, int healthScale)
     {
         // A fall has already been attributed to the ground; it is not up for
         // reclassification, and it must not extend a run of ticks either.
         if (damage.Kind == DamageKind.Fall) return;
 
-        if (!Options.Enabled || damageAmount is not { } amount || amount > Options.MaxTickDamage)
+        if (!Options.Enabled || damageAmount is not { } amount || amount > Options.CeilingFor(healthScale))
         {
+            // Deliberately does not disturb the chain: being hit while poisoned
+            // is ordinary, and must neither be swallowed by the pattern nor
+            // break it.
             damage.Kind = DamageKind.Hit;
             return;
         }
 
+        var gap = _chain.Count > 0 ? timeMs - _chain[^1].TimeMs : 0;
+
         // A small drop that does not continue the current run of ticks ends it,
         // and starts a run of its own.
-        if (_chain.Count > 0 && !Continues(_chain[^1], amount, timeMs)) Flush();
+        if (_chain.Count > 0 && !Continues(amount, gap))
+        {
+            Flush();
+            gap = 0;
+        }
 
         damage.Kind = DamageKind.Pending;
         segment.PendingDamage++;
-        _chain.Add(new Tick(damage, segment, amount, timeMs));
+        _chain.Add(new Tick(damage, segment, amount, timeMs, gap));
 
         // Confirming promotes everything held so far, not just this one, so the
         // ticks that were only suspected are settled by the same evidence.
@@ -135,14 +171,24 @@ public sealed class DamageOverTimeDetector
         _confirmed = false;
     }
 
-    private bool Continues(Tick last, int damageAmount, int timeMs)
+    /// <summary>
+    /// Whether this drop carries on the run of ticks: near enough in size, and
+    /// arriving at near enough the same spacing as the one before it.
+    /// </summary>
+    private bool Continues(int amount, int gap)
     {
-        var gap = timeMs - last.TimeMs;
         if (gap < MinIntervalMs || gap > Options.MaxIntervalMs) return false;
 
-        var larger = Math.Max(damageAmount, last.Damage);
-        return Math.Abs(damageAmount - last.Damage) <= Math.Max(2, larger * SizeTolerance);
+        var last = _chain[^1];
+        if (!Similar(amount, last.Damage, SizeTolerance, floor: 2)) return false;
+
+        // The evenness test, which is the whole discriminator. Skipped for the
+        // second tick of a run, which has no previous gap to be even with.
+        return last.GapMs == 0 || Similar(gap, last.GapMs, GapTolerance, GapToleranceFloorMs);
     }
+
+    private static bool Similar(int a, int b, double tolerance, int floor) =>
+        Math.Abs(a - b) <= Math.Max(floor, Math.Max(a, b) * tolerance);
 
     private void Confirm()
     {

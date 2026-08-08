@@ -64,6 +64,21 @@ public sealed class RunTracker
     /// <summary>Consecutive zero-health readings, so a momentary bad read is not a death.</summary>
     private int _zeroHpTicks;
 
+    /// <summary>
+    /// What this character's maximum health is taken to be, for sizing a poison
+    /// tick against. The highest of every maximum *and* every current reading
+    /// seen this run — deliberately not <c>MaxHp</c> alone.
+    ///
+    /// MaxHp is the right answer where it reads correctly, and it does on the
+    /// patches we have tested. Where it does not it reads zero, and a zero here
+    /// would put the tick ceiling at zero and switch the whole classifier off —
+    /// which is precisely the 0.2.0 failure, rebuilt. Current health is a poor
+    /// substitute but never a disabling one: players heal to full often enough
+    /// that the running maximum converges, and being conservative early in a run
+    /// costs a few ticks counted as hits rather than the feature not working.
+    /// </summary>
+    private int _healthScale;
+
     private bool _activeFlagWasSet;
 
     public RunPhase Phase { get; private set; } = RunPhase.NotStarted;
@@ -88,6 +103,17 @@ public sealed class RunTracker
 
     /// <summary>The most recent damage events, oldest first, for reviewing fall attribution.</summary>
     public IReadOnlyList<DamageEvent> RecentDamage => _recentDamage;
+
+    /// <summary>
+    /// The maximum health the tick ceiling is being measured against. Reported so
+    /// the percentage can be compared against the damage events in the same
+    /// units they are listed in — "8% of health" means nothing next to a column
+    /// of HP figures unless the health it is a percentage of is on screen too.
+    /// </summary>
+    public int HealthScale => _healthScale;
+
+    /// <summary>The largest bite that would currently be treated as a status tick, in health.</summary>
+    public int TickCeiling => _overTime.Options.CeilingFor(_healthScale);
 
     public SplitResult? ActiveSplit =>
         Phase == RunPhase.Running && _activeIndex < _splits.Count ? _splits[_activeIndex] : null;
@@ -271,6 +297,7 @@ public sealed class RunTracker
         _zeroHpTicks = 0;
         _deathLatched = false;
         _hasSeenAlive = true;
+        _healthScale = Math.Max(_healthScale, Math.Max(hp, snapshot.MaxHp));
 
         if (!inPlay)
         {
@@ -322,7 +349,7 @@ public sealed class RunTracker
 
         // The fall detector has first refusal: the ground and a status effect are
         // not competing explanations, and a landing is decided on the spot.
-        _overTime.Offer(damage, segment, amount, snapshot.IgtMs);
+        _overTime.Offer(damage, segment, amount, snapshot.IgtMs, _healthScale);
 
         if (_recentDamage.Count == RecentDamageCapacity) _recentDamage.RemoveAt(0);
         _recentDamage.Add(damage);
@@ -362,6 +389,7 @@ public sealed class RunTracker
         _hasSeenAlive = false;
         _deathLatched = false;
         _zeroHpTicks = 0;
+        _healthScale = 0;
     }
 
     /// <summary>Capture progress for storage, so the run can outlive the process.</summary>

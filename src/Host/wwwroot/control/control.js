@@ -27,6 +27,7 @@
     overlayUrl: el("overlayUrl"),
     hotkeys: el("hotkeys"),
     fdEvents: el("fdEvents"),
+    fdCeiling: el("fdCeiling"),
     quit: el("quit"),
     toast: el("toast"),
   };
@@ -95,7 +96,7 @@
   // but is posted on its own so editing one card cannot clobber the other.
   const OVER_TIME = [
     { key: "enabled", input: "dotEnabled", boolean: true },
-    { key: "maxTickDamage", input: "dotMaxTick", out: "dotMaxTickOut", number: true, integer: true, format: (v) => `${Math.round(v)} HP` },
+    { key: "maxTickPercent", input: "dotMaxTick", out: "dotMaxTickOut", number: true, format: (v) => `${(+v).toFixed(1)}% of health` },
     { key: "maxIntervalMs", input: "dotInterval", out: "dotIntervalOut", number: true, integer: true, format: (v) => `${Math.round(v)} ms` },
   ];
 
@@ -426,12 +427,21 @@
 
   async function loadDamageEvents() {
     let events = [];
+    let healthScale = 0;
+    let tickCeiling = 0;
     try {
-      ({ events } = await (await fetch("/api/hits")).json());
+      ({ events, healthScale, tickCeiling } = await (await fetch("/api/hits")).json());
     } catch (err) {
       toast(`Could not read recent damage: ${err.message}`);
       return;
     }
+
+    // The ceiling is set as a percentage and the list below is in health, so
+    // say what the percentage currently works out to. Without this, comparing
+    // the setting against the damage means doing the arithmetic by hand.
+    dom.fdCeiling.textContent = healthScale > 0
+      ? `Bites up to ${tickCeiling} HP can be a tick right now (${healthScale} max health). Anything larger is a hit on sight.`
+      : "Play for a moment and refresh — the tick ceiling is a share of your maximum health, which has not been read yet.";
 
     if (!events.length) {
       dom.fdEvents.replaceChildren(

@@ -270,6 +270,10 @@ app.MapPost("/api/tracking/reset", (TrackingSettingsStore store) =>
 // counterpart to the thresholds above: change one, play, read this back.
 app.MapGet("/api/hits", (RunController rc) => Results.Ok(new
 {
+    // The tick ceiling is a percentage, and the events below are in health. Both
+    // are needed to tell "the setting is wrong" from "the detector is wrong".
+    healthScale = rc.TickScale.HealthScale,
+    tickCeiling = rc.TickScale.TickCeiling,
     events = rc.RecentDamage.Select(e => new
     {
         igtMs = e.IgtMs,

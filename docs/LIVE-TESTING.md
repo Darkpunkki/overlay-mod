@@ -215,28 +215,34 @@ which is honest rather than wrong.
 The game does record the latter, through a pointer chain that has not been found.
 Until it is, this is a guess with its working shown.*
 
-### 4.8 — Poison and toxic *(new in 0.2.2 — the size threshold is a guess)*
+### 4.8 — Poison and toxic *(reworked in 0.2.3 — the size ceiling is still a guess)*
+
+**0.2.2's version of this did nothing whatsoever.** It required at least 1.2 s
+between ticks; the game ticks at 1 s, so every tick was thrown out, and the bound
+was hard-coded so no setting could rescue it. If you are testing 0.2.2, stop —
+the answer is already known.
 
 Still on **No Hit**. Walk into the poison swamp below the Road of Sacrifices, or
 take a Rotten Pine Resin to the face, and let the effect run its whole course.
 
 1. **The hit count should not move at all** while it ticks. Damage under No
-   Damage would have gone up once per tick.
-2. Open **Recent damage** again. Every tick should read **over time**, and the
-   `HP` column tells you what a tick actually costs on your character.
+   Damage would have gone up once per second.
+2. Open **Recent damage** again. Every tick should read **over time**, the `HP`
+   column tells you what a tick actually costs on your character, and the line
+   just above the list says what the ceiling currently works out to in HP.
 3. **Get hit by something while poisoned.** That hit must still count. This is
    the failure worth hunting: a detector that swallows real hits alongside the
    poison is worse than one that never worked.
 
-The number to report back is the one in the `HP` column. The default ceiling is
-**40 HP per bite**, which is a guess — if your ticks are bigger than that they
-will keep counting as hits, and the fix is to raise **Bites no bigger than**
+The comparison to make is **tick `HP` against the ceiling on that line**. The
+default is **8% of maximum health**, which is a guess — if your ticks are bigger,
+they will keep counting as hits, and the fix is to raise **Bites no bigger than**
 until they stop. If a real hit is showing as **over time**, lower it instead.
 
-The first two bites of any episode read **deciding…** for a few seconds before
-settling. That is expected: nothing can be shown to be poison until a third one
-arrives, and the alternative — counting them and taking them back — would make
-the hit counter flicker for the whole minute.
+The first three bites of any episode read **deciding…** for a couple of seconds
+before settling. That is expected: four bites are what make a rhythm, and the
+alternative — counting them and taking them back — would make the hit counter
+flicker once a second for the whole minute.
 
 *Why it matters: as with falls, this reads the shape of the damage rather than
 its cause. The game knows you are poisoned; the pointer chain that says so has

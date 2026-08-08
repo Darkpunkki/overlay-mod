@@ -95,7 +95,7 @@ public sealed class TrackingSettingsStore
                 _fallDamage = legacy.Sanitised();
             }
 
-            if (parsed.DamageOverTime is { } overTime) _damageOverTime = overTime.Sanitised();
+            if (parsed.DamageOverTime is { } overTime) _damageOverTime = Filled(overTime).Sanitised();
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -103,6 +103,29 @@ public sealed class TrackingSettingsStore
             // leaving the tracker with no opinion at all.
         }
     }
+
+    /// <summary>
+    /// Restore any field the stored file did not have.
+    ///
+    /// 0.2.2 wrote the tick ceiling as an amount of health (<c>maxTickDamage</c>)
+    /// rather than a percentage of it, so a file it wrote leaves
+    /// <see cref="DamageOverTimeOptions.MaxTickPercent"/> at zero — which
+    /// <see cref="DamageOverTimeOptions.Sanitised"/> would then clamp up to the
+    /// smallest legal value and quietly hand that user a ceiling far tighter
+    /// than any real tick. Nobody can legitimately have stored a zero, so a zero
+    /// means "this field was not there" and the default belongs in its place.
+    /// The dropped setting is no loss: it was measured in the wrong unit against
+    /// a detector that did not work.
+    /// </summary>
+    private static DamageOverTimeOptions Filled(DamageOverTimeOptions stored) => stored with
+    {
+        MaxTickPercent = stored.MaxTickPercent > 0
+            ? stored.MaxTickPercent
+            : DamageOverTimeOptions.Default.MaxTickPercent,
+        MaxIntervalMs = stored.MaxIntervalMs > 0
+            ? stored.MaxIntervalMs
+            : DamageOverTimeOptions.Default.MaxIntervalMs,
+    };
 
     private void Save()
     {

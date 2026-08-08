@@ -130,9 +130,11 @@ public class RunTrackerTests
         t.Update(Play(0, 950));  // heal -> no hit
         Assert.Equal(1, t.ActiveSplit.Approach.Damage);
 
-        t.Update(Play(0, 900));  // new distinct drop -> hit 2
+        t.Update(Play(0, 780));  // new distinct drop -> hit 2
         Assert.Equal(2, t.ActiveSplit.Approach.Damage);
 
+        // Both drops are far too large to be a status tick, so both are hits on
+        // sight rather than being held to see whether a rhythm develops.
         // Nothing fell, so every one of them is a hit as well as damage.
         Assert.Equal(2, t.ActiveSplit.Approach.Hits);
         Assert.Equal(0, t.ActiveSplit.Approach.FallDamage);

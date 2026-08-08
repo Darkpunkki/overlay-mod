@@ -156,25 +156,30 @@
         <span>Exclude damage over time from No&nbsp;Hit</span>
       </label>
       <p class="hint">
-        Recognised by shape, not by cause: three or more small bites of about the
-        same size, spaced at least 1.2 s apart. A combo lands far quicker than
-        that, and anything that really hurts is over the size below. Because it
-        takes a third bite to be sure, the first two wait a few seconds before
-        being called — so a genuinely small hit shows up late rather than a poison
-        tick showing up at all. Standing in a fire will be called poison too.
+        Recognised as a <strong>metronome</strong>: four or more small bites of
+        about the same size, at gaps that are about the same as each other.
+        Poison and toxic tick once a second, every second; combat never does, so
+        the evenness is what gives it away rather than the speed. Anything that
+        really hurts is over the size below and counts as a hit on sight.
+      </p>
+      <p class="hint">
+        Because it takes a fourth bite to see the rhythm, the first three wait a
+        couple of seconds before being called — so a genuinely small hit shows up
+        late rather than a poison tick showing up at all. Standing in a fire will
+        be called poison too.
       </p>
 
       <div class="fields">
         <label class="field">
           <span class="field__label">Bites no bigger than</span>
-          <input type="range" id="dotMaxTick" min="5" max="200" step="5">
-          <output class="field__value" id="dotMaxTickOut">40 HP</output>
+          <input type="range" id="dotMaxTick" min="0.5" max="30" step="0.5">
+          <output class="field__value" id="dotMaxTickOut">8.0% of health</output>
         </label>
 
         <label class="field">
           <span class="field__label">Repeating at most every</span>
-          <input type="range" id="dotInterval" min="1500" max="10000" step="250">
-          <output class="field__value" id="dotIntervalOut">4000 ms</output>
+          <input type="range" id="dotInterval" min="600" max="8000" step="100">
+          <output class="field__value" id="dotIntervalOut">2500 ms</output>
         </label>
       </div>
 
@@ -187,8 +192,11 @@
         Recent damage, newest first, with the health lost and the drop measured for
         each. This is how you check the detectors rather than trust them: if a real
         hit is showing as a fall, raise the distance or shorten the window; if one
-        is showing as poison, lower the bite size.
+        is showing as poison, lower the bite size. If poison is still showing as a
+        <em>hit</em>, compare its <code>HP</code> against the ceiling below and
+        raise the bite size past it.
       </p>
+      <p class="hint" id="fdCeiling">Refresh to see what the bite size works out to.</p>
       <div class="events" id="fdEvents"></div>
     </details>
 

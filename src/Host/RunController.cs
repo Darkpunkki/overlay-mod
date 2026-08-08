@@ -120,6 +120,16 @@ public sealed class RunController
     }
 
     /// <summary>
+    /// The health the tick ceiling is measured against, and what that ceiling
+    /// currently works out to. Reported alongside the damage log so a percentage
+    /// setting can be compared against a column of HP figures.
+    /// </summary>
+    public (int HealthScale, int TickCeiling) TickScale
+    {
+        get { lock (_gate) return (_tracker.HealthScale, _tracker.TickCeiling); }
+    }
+
+    /// <summary>
     /// Choose what to run. Changing either the route or the challenge abandons any
     /// run in progress: the splits or the thing being measured have changed, so
     /// carrying the old numbers forward would be meaningless.

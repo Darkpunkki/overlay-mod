@@ -25,7 +25,7 @@ they will be filled in as each becomes next.
 | Event-flag reads (boss defeats) | **Implemented, never verified against the game** |
 | Boss HP / boss-fight-active | **Not found.** No offset, no candidate |
 | Fall-damage classification | **Heuristic over player height, unverified live** (0.2.0) |
-| Poison / toxic classification | **Heuristic over the size and rhythm of repeated drops, unverified live** (0.2.2) |
+| Poison / toxic classification | **Heuristic over the rhythm of repeated drops** (0.2.3). Cadence confirmed as 1 s and bite size confirmed proportional to health, both reported by the user; the 8% ceiling is still unverified live |
 | `RunTracker` state machine | **Working**, unit tested |
 | Host, SSE stream, fake source | **Working** (Milestone 3), 17 unit tests pass |
 | Overlay page | **Renders real data**; visual design pass is Milestone 4 |
@@ -145,7 +145,7 @@ work that does not touch it.
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
 | 7 | **Fall-damage classification** | Take a survivable fall, then an ordinary hit, and read `GET /api/hits` back. See LIVE-TESTING 4.7 | The whole of No Hit rests on it, and the thresholds can only be set against a real game |
 | 8 | **Deaths register at all** | Die three times in one split under Deathless; the count should read three | Was broken before 0.2.0 and the fix is unproven live — see the decision on latching below |
-| 9 | **Poison / toxic classification** | Get poisoned under No Hit, let it run its course, then read `GET /api/hits` back. See LIVE-TESTING 4.8 | The default bite size (40 HP) is a guess at what a tick actually costs. Too low and every tick is a hit again; too high and real chip damage disappears |
+| 9 | **Poison / toxic classification** | Get poisoned under No Hit, let it run its course, then read `GET /api/hits` back. See LIVE-TESTING 4.8 | Cadence (1 s) and proportional bites are now known. What is still a guess is the **8%** ceiling: too low and every tick is a hit again; too high and real chip damage disappears. `/api/hits` reports the ceiling in HP next to the ticks so the two can be compared directly |
 
 **[docs/LIVE-TESTING.md](LIVE-TESTING.md) is the walkthrough for this** — how to
 launch offline without EAC, and each check written as a pass/fail with what to
@@ -216,13 +216,31 @@ Decisions not yet made. Flagged here rather than silently assumed.
   the same wall for the same reason: the game knows perfectly well that you are
   poisoned, and reading it would be exact, but it is another unverified pointer
   chain whose layout moves between patches. `DamageOverTimeDetector` instead
-  looks for what a tick *looks like* — three or more small drops of about the
-  same size, spaced between 1.2 s and a configurable ceiling apart. The floor on
-  spacing is load-bearing: several similar blows do land in a row, but a combo
-  lands in well under a second, and without that floor one would be classified as
-  poison.
+  looks for what a tick *looks like*.
+- **What a tick looks like is a metronome, not a magnitude** (0.2.3, after 0.2.2
+  shipped broken). Poison and toxic tick **once a second, every second**, for a
+  bite **proportional to maximum health**. 0.2.2 asked instead for gaps of
+  1.2–4 s and bites under a flat 40 HP — three conjunctive guesses about a game
+  nobody here had measured — and the floor sat *above* the real cadence, so every
+  tick was rejected before its size was considered and the feature did nothing at
+  all. Two rules came out of it:
+  - **A bound whose wrong value disables the feature must not be hard-coded.**
+    The 1.2 s floor was the only setting not on the control page, and it was the
+    one that was wrong. `MaxIntervalMs` is now settable down to 600 ms and
+    `MinIntervalMs` sits at 250 ms, far below anything real.
+  - **Regularity does the work that guessed magnitudes cannot.** Requiring four
+    bites whose *gaps match each other* is a far stronger and more portable
+    discriminator than any absolute band, because combat damage is irregular in
+    both timing and size no matter what the numbers happen to be.
+- **The tick ceiling is a percentage of health, and never a gate.** It is taken
+  against the highest of every `MaxHp` *and* every current-HP reading seen this
+  run, so a build where `MaxHp` reads zero degrades to a conservative scale
+  instead of a ceiling of zero — which would switch the classifier off silently,
+  which is the 0.2.0 failure rebuilt in a new place. `GET /api/hits` reports the
+  scale and the resulting ceiling in HP alongside the events, because a
+  percentage setting cannot be checked against a column of HP figures otherwise.
 
-  **A small drop is held rather than counted** until the third one settles it.
+  **A small drop is held rather than counted** until the fourth one settles it.
   Counting it and retracting later was the alternative and reads as a broken
   overlay — a minute of poison would drive the hit counter up and back down every
   few seconds. Holding costs a few seconds of latency on a genuinely small hit,

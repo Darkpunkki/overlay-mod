@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.3
+
+**0.2.2's poison detection did nothing at all.** If you installed it and poison
+still counted as hits, this is the release you want.
+
+### Fixed
+
+- **Poison and toxic really are excluded from No Hit now.** 0.2.2 was built
+  against two guesses about a game nobody had measured, and both were wrong:
+
+  - It required at least **1.2 seconds** between ticks. Poison and toxic tick
+    **once a second**, so every tick was thrown out before its size was even
+    looked at. That bound was hard-coded, so no setting could rescue it — the
+    feature was a silent no-op.
+  - It capped a tick at **40 HP**. The bite scales with your health, so 40 is a
+    fraction of one character's tick and more than another's whole tick.
+
+  It now looks for a **metronome** instead: four or more small bites of about
+  the same size, at gaps about the same as each other. Poison ticks at a fixed
+  cadence and combat never does, so the evenness is what gives it away — not the
+  speed, and not a guessed magnitude. **The size ceiling is a percentage of your
+  maximum health** (8% by default), which covers a fresh character and a late one
+  alike, and it degrades to using the highest health seen rather than switching
+  off if the game build reads maximum health as zero.
+
+- **The interval ceiling can now be set below 1.5 s.** It could not before,
+  which is half of how the above went unnoticed.
+
+### Added
+
+- **The control page now shows what the percentage works out to** — "bites up to
+  84 HP can be a tick right now (1050 max health)" — directly above the damage
+  list, which is in HP. Comparing a percentage setting against a column of HP
+  figures previously meant doing the arithmetic yourself, and that is exactly the
+  comparison that tells a wrong setting from a broken detector.
+
+### Notes for anyone upgrading
+
+Nothing to do, and nothing is lost: 0.2.2's tick size was stored in the wrong
+unit against a detector that did not work, so it is replaced with the new
+default rather than converted. Fall settings and personal bests are untouched.
+
 ## 0.2.2
 
 ### Fixed
