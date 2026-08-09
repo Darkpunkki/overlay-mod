@@ -79,6 +79,13 @@ public class DamageOverTimeTests
             }
         }
 
+        /// <summary>Rest at a bonfire: health back to maximum, and the poison cured.</summary>
+        public void HealToFull()
+        {
+            Hp = MaxHp;
+            Tracker.Update(Play(Igt, Hp, maxHp: MaxHp));
+        }
+
         /// <summary>Take <paramref name="count"/> evenly spaced bites of the same size.</summary>
         public void Poisoned(int count, int amount = Poison, int intervalMs = PoisonIntervalMs)
         {
@@ -184,14 +191,99 @@ public class DamageOverTimeTests
     }
 
     [Fact]
-    public void ThreeSmallHits_AreNotEnoughEvidence_AndAllBecomeHits()
+    public void ThreeSmallHits_WithTheVariationCombatAlwaysHas_AreStillHits()
     {
         var run = new Run();
-        run.Poisoned(count: 3);
+        run.Lose(40);
+        run.Idle(900);   run.Lose(47);
+        run.Idle(1_300); run.Lose(38);
         run.Idle(4_000);
 
+        // Three is one gap short of what it takes to believe in a rhythm partway
+        // through, so a run this size is only ever resolved as poison if it is
+        // too precise for combat to have produced. Blows that differ by a fifth
+        // in size and a third in spacing are not.
         Assert.Equal(3, run.Tracker.TotalHits);
         Assert.Equal(0, run.Tracker.TotalTickDamage);
+    }
+
+    [Fact]
+    public void AShortPoisoningCutOffEarly_IsStillResolvedAsPoison()
+    {
+        var run = new Run();
+        run.Poisoned(count: 3);   // poisoned at the bonfire, then cured by resting
+        run.Idle(4_000);
+
+        // This is the bonfire report: poison procs, three ticks land, sitting
+        // cures it, and the run ends before a fourth tick could confirm it.
+        // Charging three hits for that is the worst possible answer, and the
+        // ticks are identical to a precision no enemy achieves.
+        Assert.Equal(0, run.Tracker.TotalHits);
+        Assert.Equal(3, run.Tracker.TotalTickDamage);
+    }
+
+    [Fact]
+    public void TwoTicks_AreStillNeverEnough()
+    {
+        var run = new Run();
+        run.Poisoned(count: 2);
+        run.Idle(4_000);
+
+        // One gap is a coincidence however exact it looks.
+        Assert.Equal(2, run.Tracker.TotalHits);
+        Assert.Equal(0, run.Tracker.TotalTickDamage);
+    }
+
+    // --- resting at a bonfire, which is where a poisoned player goes ---
+    //
+    // Every one of these charged a hit before 0.2.4, for a player who took none.
+    // They share a cause: the rhythm was being demanded of every tick rather than
+    // used to recognise the effect, so the ordinary end of an ordinary poisoning
+    // orphaned a tick and billed it.
+
+    [Fact]
+    public void TheLastTickBeforeACure_ArrivesOffTheBeat_AndIsStillPoison()
+    {
+        var run = new Run();
+        run.Poisoned(count: 8);
+
+        // The sit animation runs on; one last tick lands late, out of step.
+        run.Idle(2_000);
+        run.Lose(Poison);
+        run.HealToFull();
+        run.Idle(4_000);
+
+        Assert.Equal(0, run.Tracker.TotalHits);
+        Assert.Equal(9, run.Tracker.TotalTickDamage);
+    }
+
+    [Fact]
+    public void TheFirstTickAfterAHeal_IsABiggerBite_AndIsStillPoison()
+    {
+        var run = new Run();
+        run.Poisoned(count: 8, amount: 10);
+
+        // The bite is a share of health, so healing makes the next one larger.
+        // Estus mid-fight does this as surely as a bonfire does.
+        run.HealToFull();
+        run.Idle(PoisonIntervalMs); run.Lose(30);
+        run.Idle(PoisonIntervalMs); run.Lose(30);
+        run.Idle(4_000);
+
+        Assert.Equal(0, run.Tracker.TotalHits);
+        Assert.Equal(10, run.Tracker.TotalTickDamage);
+    }
+
+    [Fact]
+    public void RestingAfterALongPoisoning_CostsNothing()
+    {
+        var run = new Run();
+        run.Poisoned(count: 8);
+        run.HealToFull();
+        run.Idle(5_000);
+
+        Assert.Equal(0, run.Tracker.TotalHits);
+        Assert.Equal(8, run.Tracker.TotalTickDamage);
     }
 
     // --- what must not be mistaken for poison ---

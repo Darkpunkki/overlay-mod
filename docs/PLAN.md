@@ -232,6 +232,17 @@ Decisions not yet made. Flagged here rather than silently assumed.
     bites whose *gaps match each other* is a far stronger and more portable
     discriminator than any absolute band, because combat damage is irregular in
     both timing and size no matter what the numbers happen to be.
+- **A pattern is how an effect is recognised, not a condition it keeps
+  satisfying** (0.2.4). Both classifiers had the same shape of bug: the test that
+  *identifies* the thing was also being used to decide whether it was still
+  happening. Poison had to keep hitting its rhythm, so the last tick before a
+  bonfire cure — off the beat — and the first tick after any heal — a bigger bite,
+  since the bite is a share of health — were orphaned and billed as hits. Falls
+  were measured inside a half-second window, so a drop onto a ledge followed by a
+  slide off it was measured from the ledge and billed as a hit. Both are now
+  *episodes*: established once, then continued on much weaker conditions until
+  they demonstrably end. The strict test still guards the entry, which is where
+  false positives are actually created.
 - **The tick ceiling is a percentage of health, and never a gate.** It is taken
   against the highest of every `MaxHp` *and* every current-HP reading seen this
   run, so a build where `MaxHp` reads zero degrades to a conservative scale

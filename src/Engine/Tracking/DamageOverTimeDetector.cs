@@ -57,6 +57,26 @@ public sealed class DamageOverTimeDetector
     private const int MinTicks = 4;
 
     /// <summary>
+    /// How many ticks it takes to call a run of them poison once it has ended
+    /// without ever being contradicted. One less than <see cref="MinTicks"/>:
+    /// see <see cref="Advance"/> for why the two questions differ.
+    /// </summary>
+    private const int ResolveTicks = 3;
+
+    /// <summary>
+    /// The tolerances a three-tick run must meet to be resolved as poison at the
+    /// end. Far tighter than the ones used to build a run, because three is one
+    /// gap short of the evidence <see cref="MinTicks"/> asks for and the
+    /// precision has to make up the difference.
+    ///
+    /// Poison is a metronome: identical bites at an identical period, and at a
+    /// 30 Hz poll a 1 s cadence reads back within about 3%. Combat is not
+    /// capable of this — three blows landing within a tenth of each other in
+    /// both size and spacing is not something a player and an enemy produce.
+    /// </summary>
+    private const double StrictTolerance = 0.10;
+
+    /// <summary>
     /// A sanity bound only. Poison and toxic tick at 1 s and this sits far below
     /// that on purpose — 0.2.2 put the floor *above* the real cadence and
     /// disabled the whole feature. The evenness test below, not this number, is
@@ -146,6 +166,19 @@ public sealed class DamageOverTimeDetector
         var age = nowMs - _chain[^1].TimeMs;
         if (Options.Enabled && age >= 0 && age <= Options.MaxIntervalMs) return;
 
+        // Resolving at the end is a different question from believing partway
+        // through. Confirming live at four ticks buys the right to call every
+        // *later* tick a tick on sight; here the run is already over, nothing
+        // ever contradicted it, and the only question is what to do with what is
+        // in hand. Three ticks answer it — but only if they are precise enough
+        // that combat could not have produced them. This is what stops a short
+        // poisoning cured at a bonfire from being billed as three hits.
+        //
+        // Deliberately not reached when the detector is switched off: whatever
+        // is held then must settle as a hit, or turning it off would silently
+        // hide damage instead of counting it.
+        if (Options.Enabled && !_confirmed && _chain.Count >= ResolveTicks && IsMachinePrecise()) Confirm();
+
         Flush();
     }
 
@@ -179,12 +212,45 @@ public sealed class DamageOverTimeDetector
     {
         if (gap < MinIntervalMs || gap > Options.MaxIntervalMs) return false;
 
+        // Once the effect has shown itself, the rhythm has done its job. It is
+        // how poison is *recognised*, not a condition poison keeps satisfying,
+        // and demanding it of every later tick charged players for the ordinary
+        // end of an ordinary poisoning:
+        //
+        //  - the last tick before a bonfire cures you arrives off the beat, out
+        //    of step with the ones before it;
+        //  - the first tick after any heal is a bigger bite, because the bite is
+        //    a share of health.
+        //
+        // Both broke the run, orphaned a tick, and billed it as a hit. Size and
+        // spacing are still bounded — the ceiling and MaxIntervalMs below and
+        // above — so what continues an effect is still small and still slow.
+        if (_confirmed) return true;
+
         var last = _chain[^1];
         if (!Similar(amount, last.Damage, SizeTolerance, floor: 2)) return false;
 
         // The evenness test, which is the whole discriminator. Skipped for the
         // second tick of a run, which has no previous gap to be even with.
         return last.GapMs == 0 || Similar(gap, last.GapMs, GapTolerance, GapToleranceFloorMs);
+    }
+
+    /// <summary>
+    /// Whether every bite in the run is the same size and every gap the same
+    /// length, to a precision combat does not reach. See <see cref="StrictTolerance"/>.
+    /// </summary>
+    private bool IsMachinePrecise()
+    {
+        for (var i = 1; i < _chain.Count; i++)
+        {
+            if (!Similar(_chain[i].Damage, _chain[i - 1].Damage, StrictTolerance, floor: 1)) return false;
+
+            // The first tick of a run has no gap of its own to compare.
+            if (i >= 2 && !Similar(_chain[i].GapMs, _chain[i - 1].GapMs, StrictTolerance, GapToleranceFloorMs))
+                return false;
+        }
+
+        return true;
     }
 
     private static bool Similar(int a, int b, double tolerance, int floor) =>

@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.2.4
+
+Two ways No Hit charged a hit for damage the player did not take.
+
+### Fixed
+
+- **Resting at a bonfire while poisoned no longer costs a hit.** The rhythm that
+  identifies poison was being demanded of *every* tick, not just used to
+  recognise the effect — so the ordinary end of an ordinary poisoning orphaned a
+  tick and billed it. Two ways that happened:
+
+  - the last tick before the bonfire cures you lands off the beat, out of step
+    with the ones before it;
+  - the first tick after any heal is a bigger bite, because the bite is a share
+    of your health — so **Estus mid-fight did this too**.
+
+  Once poison has shown itself, it no longer has to keep proving it. Ticks are
+  still bounded in size and spacing, so what continues an effect is still small
+  and still slow.
+
+  A short poisoning cured before it could be confirmed — poison procs as you
+  reach the bonfire, three ticks, then you sit — is now resolved as poison too,
+  but only when the ticks are identical to a precision combat cannot produce.
+  Three ordinary light blows still count as three hits.
+
+- **Dropping to a ledge and immediately sliding further is one fall, not a hit.**
+  Fall damage was measured by looking back half a second, which sees the end of a
+  long descent and not the drop that set it up: a two-stage fall read as under
+  two metres and got charged as a hit. It is now measured from where the descent
+  actually began, however long it took.
+
+  Walking down a slope is still not a fall however far it goes, and a fall
+  followed by a long trudge downhill stops counting as the fall.
+
+- **The drop distance in the damage log is now the real one.** It was only ever
+  the last half-second of it, which understated every fall — including the ones
+  it correctly identified — and that column is what the thresholds get tuned
+  against.
+
+### Notes for anyone upgrading
+
+Nothing to do. Settings and personal bests are untouched.
+
 ## 0.2.3
 
 **0.2.2's poison detection did nothing at all.** If you installed it and poison
