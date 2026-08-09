@@ -25,7 +25,8 @@ they will be filled in as each becomes next.
 | Event-flag reads (boss defeats) | **Implemented, never verified against the game** |
 | Boss HP / boss-fight-active | **Not found.** No offset, no candidate |
 | Fall-damage classification | **Heuristic over player height, unverified live** (0.2.0) |
-| Poison / toxic classification | **Heuristic over the rhythm of repeated drops** (0.2.3). Cadence confirmed as 1 s and bite size confirmed proportional to health, both reported by the user; the 8% ceiling is still unverified live |
+| Poison / toxic classification | **Heuristic over the rhythm of repeated drops** (0.2.3). Cadence confirmed as 1 s and bite size confirmed proportional to health; the 8% ceiling is still unverified live |
+| Active status effects, read outright | **Found 2026-08-09**, not yet wired in. See *Where status effects live* — it replaces both heuristics once the layout is known |
 | `RunTracker` state machine | **Working**, unit tested |
 | Host, SSE stream, fake source | **Working** (Milestone 3), 17 unit tests pass |
 | Overlay page | **Renders real data**; visual design pass is Milestone 4 |
@@ -145,6 +146,7 @@ work that does not touch it.
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
 | 7 | **Fall-damage classification** | Take a survivable fall, then an ordinary hit, and read `GET /api/hits` back. See LIVE-TESTING 4.7 | The whole of No Hit rests on it, and the thresholds can only be set against a real game |
 | 8 | **Deaths register at all** | Die three times in one split under Deathless; the count should read three | Was broken before 0.2.0 and the fix is unproven live — see the decision on latching below |
+| 10 | **The active-status-effect list** | ~~Search for it~~ ✅ **Found 2026-08-09** — see *Where status effects live*, below. Wiring it into the tracker is the outstanding work, not finding it | The one unfound read behind fall attribution, poison attribution and boss-fight detection |
 | 9 | **Poison / toxic classification** | Get poisoned under No Hit, let it run its course, then read `GET /api/hits` back. See LIVE-TESTING 4.8 | Cadence (1 s) and proportional bites are now known. What is still a guess is the **8%** ceiling: too low and every tick is a hit again; too high and real chip damage disappears. `/api/hits` reports the ceiling in HP next to the ticks so the two can be compared directly |
 
 **[docs/LIVE-TESTING.md](LIVE-TESTING.md) is the walkthrough for this** — how to
@@ -155,6 +157,43 @@ Checks 1–3 and 5 are observation only and need nothing but the spike running.
 Check 4 is what `GET /api/flags?ids=…` exists for — it reads arbitrary event
 flags from the live game, so candidate ids can be watched while a boss dies.
 Check 6 is a research task, not a verification.
+
+## Where status effects live (found 2026-08-09, on game version 1.15.2.0)
+
+Both damage classifiers are heuristics because the reading that would say
+outright what hurt you had never been found. **It has now been found**, by
+searching for it rather than by writing down somebody's offset — the tooling
+that did it is on the branch `speffect-search`, and this is what it turned up.
+
+From the player character, through the module table already used for health:
+
+| Path | Holds |
+|---|---|
+| `module slot 0x70` → pointer at `+0x668` → `+0x150` | `int`. **-1 when nothing is active**, `4004` while poisoned |
+| the same block, `+0x154` | `float`. Rests at `0`, then runs `0.9997` downwards — a **fraction of the effect remaining** |
+
+Four independent searches converged on it: as a whole field it separated
+poisoned from clear with a score of **1.000** on two values; as bits, `+0x150`
+bit 0 and `+0x154` bit 21 each flipped **four times across two poisonings**,
+which is the count that had to be there; and as a duration it counted down over
+94 values. The bit findings are the same fact seen twice — bit 0 is `-1`
+becoming `4004`, and bit 21 is the mantissa of a float near one.
+
+**What is still unknown**, and what the next session on this should establish:
+
+- **The layout.** Whether `+0x150` is one slot of an array of effects or the
+  only one, and if an array, its stride and length. That decides whether this
+  reads every status effect or just this one. `GET /api/prospect/block` on the
+  `speffect-search` branch dumps the block for exactly this question.
+- **The other identifiers.** `4004` is poison here. Toxic is unknown, and
+  whether fall damage appears in this list at all is unknown.
+- **Every other game version.** None of these offsets is confirmed anywhere but
+  1.15.2.0.
+
+**When it is wired in, it goes in beside the heuristics rather than instead of
+them.** A build where the pointer does not land must fall back to what 0.2.4
+does, not switch the feature off — that is the 0.2.0 failure, and this is
+exactly the kind of read that caused it.
 
 ## Open questions
 
