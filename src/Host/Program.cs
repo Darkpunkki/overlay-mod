@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.FileProviders;
 using OverlayMod.Engine.GameState;
 using OverlayMod.Engine.Persistence;
+using OverlayMod.Engine.Routes;
 using OverlayMod.Engine.Tracking;
 using OverlayMod.Host;
 using OverlayMod.Host.Appearance;
@@ -34,6 +35,8 @@ builder.Services.AddSingleton(_ => new RouteStore(options.RoutesDirectory));
 builder.Services.AddSingleton(_ => new SettingsStore(options.SettingsPath));
 builder.Services.AddSingleton(_ => new TrackingSettingsStore(options.TrackingPath));
 builder.Services.AddSingleton(_ => new AppearanceStore(options.AppearancePath));
+builder.Services.AddSingleton(_ => new AttemptStore(options.AttemptsPath));
+builder.Services.AddSingleton(_ => new SplitNameStore(options.SplitNamesPath));
 builder.Services.AddSingleton<RunController>();
 builder.Services.AddSingleton<StateBroadcaster>();
 builder.Services.AddHostedService<EngineLoop>();
@@ -136,17 +139,36 @@ app.MapGet("/events", async (HttpContext ctx, StateBroadcaster bus, Cancellation
 app.MapGet("/api/routes", (RouteStore routes, RunController rc) =>
 {
     var (currentRoute, currentProfile) = rc.Current;
+    var attempts = rc.Attempts;
+
     return Results.Ok(new
     {
         selected = new { route = currentRoute.Name, challenge = currentProfile.Type.ToString() },
+        attempts = new { started = attempts.Started, finished = attempts.Finished },
         challenges = ChallengeProfile.All.Select(p => new { type = p.Type.ToString(), name = p.Name }),
+
+        // Full split lists rather than counts, because the editor needs them and
+        // a second request per route to fetch what this endpoint already has open
+        // in memory would be pure ceremony. Five routes of twenty-six splits is a
+        // few kilobytes.
         routes = routes.All.Select(r => new
         {
             name = r.Name,
             defaultChallenge = r.DefaultChallenge.ToString(),
-            splits = r.Splits.Count,
+            splitCount = r.Splits.Count,
             autoSplits = r.AutoSplitCount,
             flagsVerified = r.FlagsVerified,
+            splits = r.Splits.Select(s => new { name = s.Name, isBoss = s.IsBoss, defeatFlagId = s.DefeatFlagId }),
+        }),
+
+        // Everything the editor can add as an auto-advancing split, with the flag
+        // id attached. Typing a boss's name instead produces a manual split,
+        // which is a fine thing to want but should not happen by accident.
+        catalogue = BuiltInRoutes.Catalogue.Select(s => new
+        {
+            name = s.Name,
+            isBoss = s.IsBoss,
+            defeatFlagId = s.DefeatFlagId,
         }),
     });
 });
@@ -163,19 +185,89 @@ app.MapPost("/api/routes/select", (SelectRequest body, RunController rc) =>
 
 // Re-read the routes directory, so hand-edited route files can be picked up
 // without restarting the host.
-app.MapPost("/api/routes/reload", (RouteStore routes) =>
+app.MapPost("/api/routes/reload", (RouteStore routes, RunController rc) =>
 {
     routes.Reload();
+    rc.RoutesChanged();
     return Results.Ok(new { routes = routes.All.Count });
 });
 
 // Write any built-in route that is missing. Routes are only seeded into an empty
 // directory, so this is how a newly added built-in reaches an existing install -
 // and how to undo deleting one by mistake.
-app.MapPost("/api/routes/restore", (RouteStore routes) =>
+app.MapPost("/api/routes/restore", (RouteStore routes, RunController rc) =>
 {
     var added = routes.RestoreBuiltIns();
+    if (added > 0) rc.RoutesChanged();
     return Results.Ok(new { added, routes = routes.All.Count });
+});
+
+// Write a route from the editor. `replacing` names the route this is an edit of,
+// which is how a rename is told from a new route that happens to collide with an
+// existing name.
+app.MapPost("/api/routes/save", (SaveRouteRequest body, RouteStore routes, RunController rc) =>
+{
+    // The default challenge is a hint - the selection overrides it - so an
+    // unrecognised one falls back rather than refusing the save, matching how
+    // challenge names are read everywhere else.
+    if (!Enum.TryParse<ChallengeType>(body.Challenge, ignoreCase: true, out var challenge))
+        challenge = ChallengeType.NoDamage;
+
+    var splits = new List<RouteSplitFile>();
+    foreach (var s in body.Splits ?? Array.Empty<SaveSplitRequest>())
+        splits.Add(new RouteSplitFile(s.Name ?? "", s.IsBoss, s.DefeatFlagId));
+
+    // Whether this edits the route currently being run. Read before the save,
+    // because after a rename the old name no longer matches anything.
+    var wasSelected = body.Replacing is not null
+        && string.Equals(rc.Current.Route.Name, body.Replacing, StringComparison.OrdinalIgnoreCase);
+
+    var result = routes.Save(new RouteFile(body.Name ?? "", challenge, splits), body.Replacing);
+    if (!result.Saved) return Results.BadRequest(new { error = result.Error });
+
+    // Follow the route through a rename, so renaming what you are running does
+    // not drop the selection back to the default. Saving any *other* route
+    // leaves the selection alone: creating a route is not choosing to run it.
+    rc.RoutesChanged(wasSelected ? result.Name : null);
+    return Results.Ok(new { saved = true, name = result.Name, routes = routes.All.Count });
+});
+
+app.MapPost("/api/routes/delete", (DeleteRouteRequest body, RouteStore routes, RunController rc) =>
+{
+    if (!routes.Delete(body.Name ?? ""))
+        return Results.NotFound(new { error = $"There is no route file for '{body.Name}'." });
+
+    rc.RoutesChanged();
+    return Results.Ok(new { deleted = true, routes = routes.All.Count });
+});
+
+// What each split is called on the overlay. A view over the routes, never written
+// into them: personal bests are keyed on the name in the route file, so renaming
+// here cannot orphan the history behind a boss.
+app.MapGet("/api/names", (SplitNameStore names) => Results.Ok(new { names = names.All }));
+
+app.MapPost("/api/names", (NamesRequest body, SplitNameStore names) =>
+    Results.Ok(new { names = names.Update(body.Names) }));
+
+// Fill in the short form of every boss this build knows about.
+app.MapPost("/api/names/short", (SplitNameStore names) =>
+    Results.Ok(new { names = names.ApplyShortNames() }));
+
+app.MapPost("/api/names/reset", (SplitNameStore names) =>
+    Results.Ok(new { names = names.Clear() }));
+
+// The attempt count for whatever is selected. Writable, because nobody starts
+// using this on their first attempt.
+app.MapPost("/api/attempts", (AttemptsRequest body, RunController rc) =>
+{
+    var applied = rc.SetAttempts(body.Started, body.Finished);
+    return Results.Ok(new { attempts = new { started = applied.Started, finished = applied.Finished } });
+});
+
+app.MapPost("/api/attempts/reset", (RunController rc) =>
+{
+    var applied = rc.SetAttempts(0, 0);
+    return Results.Ok(new { attempts = new { started = applied.Started, finished = applied.Finished } });
 });
 
 // Read arbitrary event flags. This exists for the live verification session:
@@ -360,6 +452,26 @@ finally
 
 /// <summary>Body of a route-selection request.</summary>
 internal sealed record SelectRequest(string Route, string Challenge);
+
+/// <summary>
+/// A route as the editor sends it. <paramref name="Replacing"/> is the name the
+/// route had before this edit — absent when creating one, equal to
+/// <paramref name="Name"/> when editing in place, and different when renaming.
+/// </summary>
+internal sealed record SaveRouteRequest(
+    string? Replacing,
+    string? Name,
+    string? Challenge,
+    IReadOnlyList<SaveSplitRequest>? Splits);
+
+internal sealed record SaveSplitRequest(string? Name, bool IsBoss, uint? DefeatFlagId);
+
+internal sealed record DeleteRouteRequest(string? Name);
+
+/// <summary>A full replacement of the display-name map; null clears it.</summary>
+internal sealed record NamesRequest(Dictionary<string, string>? Names);
+
+internal sealed record AttemptsRequest(int Started, int Finished);
 
 /// <summary>
 /// Body of a tracking-settings update. Both halves are optional: the control

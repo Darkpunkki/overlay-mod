@@ -25,6 +25,7 @@ public sealed record OverlayState(
     PlayerView Player,
     bool BossFightActive,
     int ActiveIndex,
+    AttemptsView Attempts,
     IReadOnlyList<SplitView> Splits)
 {
     /// <summary>
@@ -34,8 +35,18 @@ public sealed record OverlayState(
     public int AppearanceVersion { get; init; }
 
 
+    /// <param name="labels">
+    /// Renames, canonical split name to what the overlay should call it. Applied
+    /// here rather than in the route so the personal bests keyed on the canonical
+    /// name survive a rename — see <see cref="SplitNameStore"/>.
+    /// </param>
     public static OverlayState From(
-        RunTracker tracker, Route route, PersonalBests bests, GameSnapshot snapshot)
+        RunTracker tracker,
+        Route route,
+        PersonalBests bests,
+        AttemptCount attempts,
+        IReadOnlyDictionary<string, string> labels,
+        GameSnapshot snapshot)
     {
         var splits = new List<SplitView>(tracker.Splits.Count);
         foreach (var s in tracker.Splits)
@@ -53,7 +64,10 @@ public sealed record OverlayState(
                 bests.SplitIgtMs(s.Name),
                 bests.SplitDamage(s.Name),
                 bests.SplitHits(s.Name),
-                bests.SplitDeaths(s.Name)));
+                bests.SplitDeaths(s.Name))
+            {
+                Label = labels.TryGetValue(s.Name, out var label) ? label : null,
+            });
         }
 
         var profile = route.Profile;
@@ -81,6 +95,7 @@ public sealed record OverlayState(
             new PlayerView(snapshot.PlayerLoaded, snapshot.IsLoading),
             snapshot.BossFightActive,
             tracker.ActiveIndex,
+            new AttemptsView(attempts.Started, attempts.Finished),
             splits);
     }
 }
@@ -126,6 +141,14 @@ public sealed record SegmentView(int IgtMs, int Damage, int Hits, int Deaths)
     public static SegmentView From(SegmentResult r) => new(r.IgtMs, r.Damage, r.Hits, r.Deaths);
 }
 
+/// <summary>
+/// How many attempts this route has seen under this challenge, and how many were
+/// finished. <paramref name="Finished"/> is sent although the overlay shows only
+/// the count: "attempt 214, 3 finished" is a different and sometimes more
+/// interesting sentence, and the page can start saying it without a server change.
+/// </summary>
+public sealed record AttemptsView(int Started, int Finished);
+
 public sealed record SplitView(
     string Name,
     bool IsBoss,
@@ -139,4 +162,15 @@ public sealed record SplitView(
     int? PbIgtMs,
     int? PbDamage,
     int? PbHits,
-    int? PbDeaths);
+    int? PbDeaths)
+{
+    /// <summary>
+    /// What to show instead of <see cref="Name"/>, or null when the split is not
+    /// renamed. Null rather than a copy of the name so the overlay's fallback is
+    /// the one obvious behaviour and the payload does not repeat itself.
+    ///
+    /// <see cref="Name"/> stays canonical because it is the key everything else
+    /// is filed under — the personal bests above included.
+    /// </summary>
+    public string? Label { get; init; }
+}

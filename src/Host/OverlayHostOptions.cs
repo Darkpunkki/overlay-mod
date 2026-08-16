@@ -39,6 +39,12 @@ public sealed class OverlayHostOptions
 
     public string AppearancePath => Path.Combine(DataDirectory, "appearance.json");
 
+    /// <summary>How many attempts each route has seen, per challenge.</summary>
+    public string AttemptsPath => Path.Combine(DataDirectory, "attempts.json");
+
+    /// <summary>What each split is called on the overlay, where that differs from the route file.</summary>
+    public string SplitNamesPath => Path.Combine(DataDirectory, "names.json");
+
     /// <summary>Fall-damage thresholds and anything else about how damage is classified.</summary>
     public string TrackingPath => Path.Combine(DataDirectory, "tracking.json");
 

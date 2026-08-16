@@ -10,6 +10,10 @@
 :root {
   --om-scale: 1;
 
+  /* The clock's own multiplier, on top of --om-scale. The clock is read from
+     across a room and the split list is not, so they want different sizes. */
+  --om-timer-scale: 1;
+
   --om-font: "Segoe UI", system-ui, sans-serif;
   --om-font-numeric: "Consolas", ui-monospace, monospace;
 
@@ -72,7 +76,7 @@ html, body {
 
 .run__timer {
   font-family: var(--om-font-numeric);
-  font-size: 2.25rem;
+  font-size: calc(2.25rem * var(--om-timer-scale));
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
   letter-spacing: -0.01em;
@@ -87,7 +91,22 @@ html, body {
   color: var(--om-text-dim);
 }
 
+/* Attempts and the whole-run best share the right-hand end. Grouping them
+   keeps the challenge name pinned left however many of the two are showing. */
+.run__meta-right {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+}
+
 .run__profile { color: var(--om-accent); }
+
+.run__attempts {
+  font-variant-numeric: tabular-nums;
+  color: var(--om-text-faint);
+}
+
+.run__attempts[hidden] { display: none; }
 
 /* The whole-run best, for challenges that drop the totals footer. */
 .run__pb {

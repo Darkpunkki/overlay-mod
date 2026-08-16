@@ -27,6 +27,8 @@ they will be filled in as each becomes next.
 | Fall-damage classification | **Heuristic over player height, unverified live** (0.2.0) |
 | Poison / toxic classification | **Heuristic over the rhythm of repeated drops** (0.2.3). Cadence confirmed as 1 s and bite size confirmed proportional to health; the 8% ceiling is still unverified live |
 | Active status effects, read outright | **Found 2026-08-09**, not yet wired in. See *Where status effects live* — it replaces both heuristics once the layout is known |
+| Item-pickup flags (Anri's Straight Sword) | **Implemented** (0.3.0) on the same lookup as boss flags. Sourced id, never seen flipping live |
+| Hits that deal no damage (Yhorm's stomp, Undead Hunter Charm) | **Not started.** Needs the status-effect read below, plus the two effect ids |
 | `RunTracker` state machine | **Working**, unit tested |
 | Host, SSE stream, fake source | **Working** (Milestone 3), 17 unit tests pass |
 | Overlay page | **Renders real data**; visual design pass is Milestone 4 |
@@ -62,7 +64,10 @@ persists, and the host runs happily before the game exists.
       process ignores `Ctrl+C`, survives closing its terminal, and hides its tray
       icon behind the notification-area overflow arrow — leaving Task Manager as
       the only exit. The control page now has a Quit button.
-- [ ] Route editor, so custom routes do not mean hand-editing JSON. *Optional.*
+- [x] **Route editor** (0.3.0), so custom routes do not mean hand-editing JSON.
+      Create, duplicate, rename, delete; reorder, add and remove splits, with a
+      catalogue of every known boss so an added split brings its flag id with it.
+      The files stay plain JSON and hand-editing still works.
 - [x] **Appearance controls.** Size, colours, panel transparency, shadow strength
       and split-row count, edited on the control page with a live preview over a
       chequerboard. Values are validated server-side before reaching CSS — they
@@ -88,11 +93,18 @@ persists, and the host runs happily before the game exists.
 - [x] **Personal-best colouring is mirrored** between the live value and the
       best, so one of the pair is always green and the other red.
 - [x] **The route name is off the overlay.** Chosen once, never changes mid-run.
+- [x] **Attempts are counted** (0.3.0), per route and challenge, started and
+      finished, and shown beside the challenge name. Writable, because nobody
+      starts using this on their first attempt.
+- [x] **Split names are the player's to choose** (0.3.0). A canonical→display map
+      applied at projection time, so personal bests — which are keyed on the
+      canonical name — survive a rename.
+- [x] **The clock has its own size** (0.3.0), on top of the overall scale.
 - [ ] **No end-of-run state.** A finished run just stops; there is no "run
       complete" treatment and no acknowledgement of a new personal best.
-- [ ] **Abandoned attempts leave no history.** Split bests now survive them, but
-      the attempt itself is not recorded, so there is no way to look back over
-      how attempts have gone — only at the best.
+- [ ] **Abandoned attempts leave no detail.** The *count* now survives them, but
+      the attempt itself is not recorded, so there is still no way to look back
+      over how individual attempts went — only at the tally and the best.
 - [ ] Approach-vs-boss breakdown displays correctly but is **always empty in a
       real game** — nothing sets `BossFightActive`. Blocked on the boss-HP
       offset. *(needs the game)*
@@ -142,6 +154,7 @@ work that does not touch it.
 | 2 | **IGT persists across a restart** | Note IGT, quit to desktop, relaunch, load in; IGT should resume at or above the noted value | The entire resume-a-run feature rests on this |
 | 3 | **IGT at the main menu** | Watch IGT while sitting at the menu | The tracker assumes menu IGT is meaningless and ignores it; if it reads as a huge or negative value the resume comparison needs a guard |
 | 4 | **Boss-defeat flag ids** | Kill any boss and watch its split advance, or `GET /api/flags?ids=…` to check one directly | All 25 ids are now filled in from the published table, and the two already known match it — but none have been seen flipping in a real run |
+| 4b | **The Anri item-pickup flag** | Kill Anri at the Halfway Fortress on the Glitchless route; the split should advance as the sword is picked up. `GET /api/flags?ids=50006030` checks it directly | Item-pickup flags are a different id range (`50006xxx`, global category zero) to the boss flags, so confirming one boss flag does not confirm this. It is the only split in that route that is not a boss |
 | 5 | **Player-loaded timing** | Watch when `player` flips true relative to regaining control | Decides whether runs start slightly early, during the fade-in |
 | 6 | **Boss HP / boss-fight-active** | Not yet possible — no offset found | Blocks approach-vs-boss attribution entirely |
 | 7 | **Fall-damage classification** | Take a survivable fall, then an ordinary hit, and read `GET /api/hits` back. See LIVE-TESTING 4.7 | The whole of No Hit rests on it, and the thresholds can only be set against a real game |
@@ -195,6 +208,36 @@ them.** A build where the pointer does not land must fall back to what 0.2.4
 does, not switch the feature off — that is the 0.2.0 failure, and this is
 exactly the kind of read that caused it.
 
+### What this unblocks: hits that deal no damage
+
+**Yhorm's stomp and the Undead Hunter Charm.** Both are counted as hits by
+No-Hit convention and neither costs any health, so *nothing built on health can
+see them*. This is the one requested feature 0.3.0 does not ship, and it was
+deferred deliberately rather than half-built: the read above is the only precise
+signal, its layout is still unknown, and the two effect ids are unknown on top of
+that. Shipping the plumbing without the ids would have been a switch that does
+nothing — the 0.2.2 failure with a new label on it.
+
+The design when it is picked up:
+
+- `GameSnapshot` gains the active effect ids. Empty when the read does not land,
+  and **nothing else may depend on it** — a build where the chain misses must
+  behave exactly like 0.2.4.
+- `appdata/tracking.json` gains a list of effect ids that count as a hit, empty
+  by default, with the control page showing the **live** active ids beside it.
+  That makes the unknown discoverable by the player rather than something this
+  project has to know in advance: get stomped, read the id off the page, click
+  "count this as a hit". The two ids then arrive as configuration, not a release.
+- A watched id appearing is a rising edge, recorded as a `DamageEvent` of zero
+  damage and `DamageKind.Hit`.
+
+**Rejected: detecting a knockdown by the player's animation.** It would catch
+both without knowing any id, and it would also fire on every blocked hit and
+every ordinary stagger — which is a much larger set than the two effects the
+convention actually counts. Over-counting hits under No Hit is not the safe
+direction it sounds like; it makes the overlay wrong in a way the player cannot
+audit.
+
 ## Open questions
 
 Decisions not yet made. Flagged here rather than silently assumed.
@@ -206,6 +249,58 @@ Decisions not yet made. Flagged here rather than silently assumed.
 
 ## Decisions already made
 
+- **A death is a hit, whatever caused it** (0.3.0). Both damage classifiers exist
+  to set aside damage the player was not really dealt — the ground, a poisoning
+  running its course — and neither reading survives the player dying of it.
+  Falling to your death is not the ground doing what the ground does. So a fatal
+  event skips both classifiers outright rather than being reclassified after the
+  fact: it is not offered to the over-time detector and its descent is measured
+  but not attributed. The alternative — adding a hit alongside whatever the
+  classifiers said — double-counts the ordinary case where an enemy's last blow
+  kills you, which is the common one. Under No Hit a run that ends in a corpse
+  must never read as clean, and this is the only direction that cannot make an
+  invalid run look valid.
+- **Item pickups are event flags, so no inventory read was needed** (0.3.0). The
+  Anri split was specified as "when the straight sword is received", and the
+  obvious implementation was a new pointer chain into the player's inventory —
+  a brand-new unverified read of exactly the kind that broke every counter in
+  0.2.0. It turned out to be unnecessary: Dark Souls III records picking an item
+  up as an event flag of its own, which is how it knows not to offer the item
+  twice, and the published table names `50006030` as Anri's Straight Sword from
+  the first of the two chances to kill her. Same provenance as the boss ids, and
+  it goes through the flag lookup that is already confirmed against a live game.
+  **Check for an existing flag before reaching for a new pointer chain.**
+- **Display names are a view over the route, never written into it** (0.3.0).
+  Renaming a split by editing the route file would work and would be wrong:
+  personal bests are keyed on the split's name, so a rename there silently
+  orphans every gold split behind that boss. The map is applied at projection
+  time, the payload carries `label` alongside the canonical `name`, and one map
+  covers every route at once. Nothing is pre-filled — the honest starting point
+  is the name the route actually contains — and the short-name preset never
+  overwrites a name the user chose by hand.
+- **Attempts are counted per route *and* challenge, in their own file** (0.3.0).
+  Not in the record store: that file holds results and folds them into minimums,
+  and an attempt count is neither — it goes up when a run *starts*, which is the
+  moment nothing has happened yet. Keeping it separate also leaves the record
+  store's shape untouched for the SQLite move. It is counted at `StartNew`, which
+  is the single funnel every fresh run passes through; counting at the call sites
+  would double-count the ones that reach another. And it is **writable**, because
+  nobody starts using this on their first attempt.
+- **The route editor works on a copy, and a saved route is never marked
+  verified** (0.3.0). Nothing is written until Save, so backing out costs nothing
+  and a half-finished edit never reaches the disk. `FlagsVerified` is forced
+  false on the way in: only a live game can earn that, and the editor is not a
+  live game. Renaming is a write plus a delete rather than a move, so the file is
+  always named after the route it holds — except for a hand-written file, which
+  is written back where it was found rather than duplicated under a slug.
+  **Saving a route does not select it**; only renaming the route already selected
+  moves the selection, because creating a route is not choosing to run it.
+- **A route reload only abandons the run if the split list actually changed**
+  (0.3.0). Route files are reloaded wholesale, so every save produces new objects
+  even for routes nobody touched — abandoning on all of them would mean saving an
+  unrelated route cost you your attempt. Names, boss flags and ordering are all
+  compared, because a corrected flag id looks identical on screen and behaves
+  differently.
 - **Transport: Server-Sent Events**, not WebSocket. The data flow is one-way
   (engine → overlay), SSE reconnects automatically, and it is far less code on
   both ends. Revisit only if the overlay ever needs to talk back.

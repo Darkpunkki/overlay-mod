@@ -47,12 +47,15 @@ public sealed class RunController
     private readonly RouteStore _routes;
     private readonly SettingsStore _settings;
     private readonly TrackingSettingsStore _tracking;
+    private readonly AttemptStore _attemptStore;
+    private readonly SplitNameStore _names;
     private readonly ILogger<RunController> _log;
 
     private RouteFile _routeFile;
     private ChallengeProfile _profile;
     private Route _route;
     private PersonalBests _bests;
+    private AttemptCount _attempts;
 
     /// <summary>Set whenever contact with the game is lost, forcing a resume-or-restart decision.</summary>
     private bool _awaitingResumeDecision = true;
@@ -75,6 +78,8 @@ public sealed class RunController
         RouteStore routes,
         SettingsStore settings,
         TrackingSettingsStore tracking,
+        AttemptStore attempts,
+        SplitNameStore names,
         ILogger<RunController> log)
     {
         _records = records;
@@ -82,6 +87,8 @@ public sealed class RunController
         _routes = routes;
         _settings = settings;
         _tracking = tracking;
+        _attemptStore = attempts;
+        _names = names;
         _log = log;
 
         // Restore the last route and challenge chosen. If that route has since
@@ -91,6 +98,7 @@ public sealed class RunController
         _profile = ChallengeProfile.For(saved?.Challenge ?? _routeFile.DefaultChallenge);
         _route = _routeFile.ToRoute(_profile);
         _bests = _records.BestsFor(_route.Name);
+        _attempts = _attemptStore.Get(_route.Name, _profile.Type);
 
         // A run left unfinished by a previous session is picked up here; whether
         // it is actually resumed is decided once the game is back and in play.
@@ -107,6 +115,21 @@ public sealed class RunController
     public (RouteFile Route, ChallengeProfile Profile) Current
     {
         get { lock (_gate) return (_routeFile, _profile); }
+    }
+
+    /// <summary>Attempts on the current route and challenge.</summary>
+    public AttemptCount Attempts
+    {
+        get { lock (_gate) return _attempts; }
+    }
+
+    /// <summary>
+    /// Set the attempt count outright, for arriving with a tally from LiveSplit
+    /// or from a notebook. Applies to whatever is selected right now.
+    /// </summary>
+    public AttemptCount SetAttempts(int started, int finished)
+    {
+        lock (_gate) return _attempts = _attemptStore.Set(_route.Name, _profile.Type, started, finished);
     }
 
     /// <summary>
@@ -148,6 +171,7 @@ public sealed class RunController
             _profile = ChallengeProfile.For(challenge);
             _route = _routeFile.ToRoute(_profile);
             _bests = _records.BestsFor(_route.Name);
+            _attempts = _attemptStore.Get(_route.Name, _profile.Type);
 
             _tracker.Reset();
             _parked.Clear();
@@ -158,6 +182,68 @@ public sealed class RunController
             _log.LogInformation("Selected route {Route} as {Challenge}.", _routeFile.Name, _profile.Name);
             return true;
         }
+    }
+
+    /// <summary>
+    /// Re-resolve the selection after the route files on disk changed — an edit,
+    /// a rename, a delete, or a reload.
+    ///
+    /// <paramref name="preferRouteName"/> is what the route is called now, which
+    /// matters after a rename: without it the selection would fall back to the
+    /// default the moment somebody renamed the route they were running.
+    ///
+    /// **The run survives an edit that changed nothing about its splits.** Route
+    /// files are reloaded wholesale, so every save produces new objects even for
+    /// routes nobody touched; abandoning the run on all of them would mean saving
+    /// an unrelated route cost you your attempt. What abandons a run is the split
+    /// list actually differing — at which point the numbers underneath no longer
+    /// describe what is on screen.
+    /// </summary>
+    public void RoutesChanged(string? preferRouteName = null)
+    {
+        lock (_gate)
+        {
+            var previous = _routeFile;
+            var file = (preferRouteName is null ? null : _routes.Find(preferRouteName))
+                ?? _routes.Find(previous.Name)
+                ?? _routes.Default;
+
+            _routeFile = file;
+            _route = file.ToRoute(_profile);
+            _bests = _records.BestsFor(_route.Name);
+            _attempts = _attemptStore.Get(_route.Name, _profile.Type);
+            _settings.Save(new Selection(file.Name, _profile.Type));
+
+            if (SameSplits(previous, file)) return;
+
+            _tracker.Reset();
+            _parked.Clear();
+            _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
+            _awaitingResumeDecision = true;
+
+            _log.LogInformation("Route {Route} changed; the run in progress was abandoned.", file.Name);
+        }
+    }
+
+    /// <summary>
+    /// Whether two loads of a route describe the same run. Flag ids are compared
+    /// as well as names: a split whose auto-advance flag was corrected looks
+    /// identical on screen and behaves differently, and the tracker holds its own
+    /// copy of the route.
+    /// </summary>
+    private static bool SameSplits(RouteFile a, RouteFile b)
+    {
+        if (!string.Equals(a.Name, b.Name, StringComparison.Ordinal)) return false;
+        if (a.Splits.Count != b.Splits.Count) return false;
+
+        for (var i = 0; i < a.Splits.Count; i++)
+        {
+            if (a.Splits[i].Name != b.Splits[i].Name) return false;
+            if (a.Splits[i].IsBoss != b.Splits[i].IsBoss) return false;
+            if (a.Splits[i].DefeatFlagId != b.Splits[i].DefeatFlagId) return false;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -293,11 +379,20 @@ public sealed class RunController
         if (!sameRun) StartNew(snapshot);
     }
 
+    /// <summary>
+    /// Begin an attempt. Every route into a fresh run comes through here —
+    /// loading into the world, the resume check deciding this is a different
+    /// character, a manual start, a reset followed by loading back in — which is
+    /// why the attempt counter lives here and nowhere else. Counting it at any of
+    /// those call sites individually would double-count the ones that reach
+    /// another.
+    /// </summary>
     private void StartNew(GameSnapshot snapshot)
     {
         _tracker.Reset();
         _tracker.Start(_route, snapshot);
         _bests = _records.BestsFor(_route.Name);
+        _attempts = _attemptStore.Begin(_route.Name, _profile.Type);
         _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
         Checkpoint(force: true);
     }
@@ -339,6 +434,7 @@ public sealed class RunController
         { TotalHits = _tracker.TotalHits });
 
         _bests = _records.BestsFor(_route.Name);
+        _attempts = _attemptStore.Finish(_route.Name, _profile.Type);
         _parked.Clear();
 
         _log.LogInformation(
@@ -402,6 +498,6 @@ public sealed class RunController
 
     public OverlayState Project(GameSnapshot snapshot)
     {
-        lock (_gate) return OverlayState.From(_tracker, _route, _bests, snapshot);
+        lock (_gate) return OverlayState.From(_tracker, _route, _bests, _attempts, _names.All, snapshot);
     }
 }

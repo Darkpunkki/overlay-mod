@@ -17,6 +17,7 @@ namespace OverlayMod.Engine.Tracking;
 ///    did, leaving hits as what is left.
 ///  - Deaths are latched on health reaching zero, not edge-detected. See
 ///    <see cref="Update"/>.
+///  - A death is always a hit, whatever caused it. See <see cref="RecordDamage"/>.
 ///  - Approach vs boss attribution is driven by <see cref="GameSnapshot.BossFightActive"/>.
 /// </summary>
 public sealed class RunTracker
@@ -322,6 +323,23 @@ public sealed class RunTracker
         _hasPrevHp = true;
     }
 
+    /// <summary>
+    /// Record one drop in health and decide what caused it.
+    ///
+    /// <strong>A fatal blow is never classified.</strong> Both detectors exist to
+    /// set aside damage the player was not really dealt — the ground, a poisoning
+    /// running its course — and neither reading survives the player dying of it.
+    /// Falling to your death is not "the ground doing what the ground does", and
+    /// a poisoning you did not cure is not a tick to be discounted: under No Hit
+    /// the settled convention is that dying by any cause is taking a hit, and a
+    /// run that ends in a corpse must never read as clean. So a fatal event skips
+    /// the fall attribution and is not offered to the over-time detector at all;
+    /// it counts as damage and as a hit, once.
+    ///
+    /// The descent is still measured for it, because the fall thresholds are
+    /// tuned by reading <c>GET /api/hits</c> back afterwards and a fatal fall is
+    /// exactly the event worth being able to see there.
+    /// </summary>
     private void RecordDamage(SegmentResult segment, in GameSnapshot snapshot, bool fatal)
     {
         // How much health this cost. Unmeasurable when there is no previous
@@ -330,7 +348,7 @@ public sealed class RunTracker
         int? amount = _hasPrevHp ? Math.Max(0, _prevHp - snapshot.Hp) : null;
 
         var descent = _fall.DescentMetres(snapshot.IgtMs);
-        var isFall = _fall.IsFall(descent);
+        var isFall = !fatal && _fall.IsFall(descent);
 
         segment.Damage++;
         if (isFall) segment.FallDamage++;
@@ -344,12 +362,13 @@ public sealed class RunTracker
             fatal,
             Math.Round(descent, 2))
         {
-            Kind = isFall ? DamageKind.Fall : DamageKind.Pending,
+            Kind = fatal ? DamageKind.Hit : isFall ? DamageKind.Fall : DamageKind.Pending,
         };
 
         // The fall detector has first refusal: the ground and a status effect are
-        // not competing explanations, and a landing is decided on the spot.
-        _overTime.Offer(damage, segment, amount, snapshot.IgtMs, _healthScale);
+        // not competing explanations, and a landing is decided on the spot. A
+        // death is offered to neither.
+        if (!fatal) _overTime.Offer(damage, segment, amount, snapshot.IgtMs, _healthScale);
 
         if (_recentDamage.Count == RecentDamageCapacity) _recentDamage.RemoveAt(0);
         _recentDamage.Add(damage);

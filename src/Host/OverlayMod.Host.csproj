@@ -55,7 +55,7 @@
 
     <!-- Surfaced in the log banner, on the control page and in the tray tooltip.
          A user reporting a problem should never have to guess which build. -->
-    <Version>0.2.4</Version>
+    <Version>0.3.0</Version>
   </PropertyGroup>
 
 </Project>

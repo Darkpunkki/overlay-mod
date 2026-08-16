@@ -154,6 +154,29 @@ reverse-engineered, so "which hop broke" is the only question worth asking.
 
 You can always advance manually with **Ctrl+Alt+D**.
 
+### 4.4b — Does the Anri split fire on the sword? *(new in 0.3.0)*
+
+Select **Glitchless route, Anri**. The third split is Anri of Astora, and it
+advances on the event flag Dark Souls III sets when **Anri's Straight Sword** is
+picked up — not on a boss dying, because Anri is not a boss.
+
+Kill Anri at the **Halfway Fortress** in the Road of Sacrifices and pick up the
+sword. The split should advance as you take it.
+
+This is worth checking separately from 4.4 even if boss splits are working. Item
+pickups live in a different id range (`50006xxx`) and resolve through the global
+category rather than the world-block tables, so they exercise a different half of
+the lookup. Check the flag directly with:
+
+```
+http://127.0.0.1:8777/api/flags?ids=50006030
+```
+
+It should read `false` before and `true` after. If it reads `true` on a save
+where you have never taken the sword, the id is wrong and I want to know — that
+is the one failure mode a wrong id has here, and it would skip the split
+immediately.
+
 ### 4.5 — Does a run survive quitting the game? *(the one I am least sure of)*
 
 1. Start a run, take a hit or two, note the timer and hit count.
@@ -192,12 +215,21 @@ regression and I want the log line.**
 
 A run is never failed automatically, by design; it keeps counting.
 
+**Then check what a death does to No Hit** (new in 0.3.0). Switch to **No Hit**,
+note the hit count, and die — to anything. The count should go up by exactly one,
+including when the thing that killed you was a fall or a poisoning that No Hit
+would otherwise have set aside. Under 0.2.4 those left the run reading as clean.
+
+One is the number to check. Two would mean a death is being billed alongside the
+blow that caused it, which is the failure mode this change could have.
+
 ### 4.7 — Fall damage *(the new heuristic — this is the one to watch)*
 
 Select **No Hit**. Then, deliberately:
 
 1. **Take a fall that hurts** — off a ledge you know you survive. The hit count
-   should **not** move. The **damage** count under No Damage would have.
+   should **not** move. The **damage** count under No Damage would have. (A fall
+   you *don't* survive is a hit — see 4.6.)
 2. **Take an ordinary hit on level ground.** The hit count **should** move.
 3. Open **What counts as a hit → Recent damage** on the control page. Each event
    shows the health it cost, the drop measured, and the call made. That list is

@@ -123,7 +123,25 @@ code { background: #000; padding: .1rem .3rem; border-radius: .2rem; font-size: 
 .choice__warn { font-size: .75rem; color: var(--warn); }
 .choice.is-selected .choice__warn { color: #6b4a00; }
 
-.row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.row--baseline { align-items: center; }
+
+.hint--warn { color: var(--warn); }
+.hint[hidden] { display: none; }
+
+/* Text and number entry, sharing one look with the stepper input above. */
+.text {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--edge);
+  border-radius: .35rem;
+  padding: .4rem .55rem;
+  font: inherit;
+}
+
+.text--grow { flex: 1 1 12rem; min-width: 0; }
+.text--number { width: 6rem; font-variant-numeric: tabular-nums; }
+.text:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
 
 .btn {
   background: var(--accent);
@@ -176,6 +194,84 @@ code { background: #000; padding: .1rem .3rem; border-radius: .2rem; font-size: 
 
 /* A count, not a proportion: typed or stepped, never dragged. */
 .field--stepper { grid-template-columns: 7rem auto; }
+
+/* No readout to make room for, so the control takes the rest of the row. */
+.field--text { grid-template-columns: 7rem 1fr; }
+
+/* Sits in a row beside its own buttons rather than in a stack of fields. */
+.field--inline { display: flex; align-items: center; gap: .5rem; }
+
+.btn--danger { color: var(--warn); }
+.btn--danger:hover { border-color: var(--warn); }
+
+/* --- route editor --- */
+
+.editor {
+  border: 1px solid var(--edge);
+  border-radius: .35rem;
+  padding: .9rem 1rem .2rem;
+  margin-bottom: 1rem;
+}
+
+.editor[hidden] { display: none; }
+
+.editor__head { display: flex; flex-direction: column; gap: .6rem; margin-bottom: .5rem; }
+
+.splitlist {
+  list-style: none;
+  margin: 0 0 .75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+/* index | name | auto-advance | move up | move down | remove */
+.splitrow {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto auto auto auto;
+  gap: .5rem;
+  align-items: center;
+  border: 1px solid var(--edge);
+  border-radius: .35rem;
+  padding: .3rem .55rem;
+  font-size: .875rem;
+}
+
+.splitrow__index { color: var(--dim); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.splitrow__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Which splits will advance on their own, and which need the hotkey. The one
+   thing about a hand-built route that is not obvious from reading it. */
+.splitrow__flag { font-size: .7rem; color: var(--dim); }
+.splitrow--manual { border-style: dashed; }
+.splitrow--manual .splitrow__flag { color: var(--warn); }
+
+.iconbtn {
+  width: 1.9rem;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--edge);
+  border-radius: .3rem;
+  font: inherit;
+  font-size: .875rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.iconbtn:hover:not(:disabled) { border-color: var(--dim); }
+.iconbtn:disabled { opacity: .35; cursor: default; }
+
+.splitlist__empty { color: var(--dim); font-size: .8125rem; }
+
+/* --- split names --- */
+
+.names { display: flex; flex-direction: column; gap: .35rem; }
+
+.namerow { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; align-items: center; }
+.namerow__canonical { font-size: .8125rem; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .stepper { display: flex; align-items: stretch; gap: .25rem; }
 

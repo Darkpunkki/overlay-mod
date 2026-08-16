@@ -48,6 +48,23 @@ public static class BuiltInRoutes
     private static readonly RouteSplitFile TwinPrinces = Boss("Lothric, Younger Prince", 13410830);
     private static readonly RouteSplitFile SoulOfCinder = Boss("Soul of Cinder", 14100800);
 
+    // --- Not a boss, but a kill a route can be built around ---
+
+    /// <summary>
+    /// Anri of Astora, killed at the Halfway Fortress in the Road of Sacrifices —
+    /// the first of the two chances the questline gives you, and the one a
+    /// glitchless route takes on the way to the Crystal Sage.
+    ///
+    /// **The flag is the sword, not the corpse.** Dark Souls III records picking
+    /// an item up as an event flag of its own, which is how the game knows not to
+    /// offer it twice, and <c>50006030</c> is the one for Anri's Straight Sword.
+    /// So this reads exactly the moment the player suggested splitting on —
+    /// receiving the sword — through the flag machinery that is already here and
+    /// already confirmed against a live game, rather than through a new pointer
+    /// chain into the inventory. Same provenance as the boss ids above.
+    /// </summary>
+    private static readonly RouteSplitFile Anri = Boss("Anri of Astora", 50006030);
+
     // --- Ashes of Ariandel / The Ringed City ---
 
     private static readonly RouteSplitFile SisterFriede = Boss("Sister Friede", 14500800);
@@ -110,6 +127,33 @@ public static class BuiltInRoutes
     { FlagsVerified = false };
 
     /// <summary>
+    /// The glitchless No-Hit route that detours through Anri of Astora for the
+    /// straight sword, then takes the ordinary path to the Kiln. Every split
+    /// advances on a flag, Anri's included.
+    /// </summary>
+    public static RouteFile GlitchlessAnri => new(
+        "Glitchless route, Anri",
+        ChallengeType.NoHit,
+        new[]
+        {
+            IudexGundyr,
+            Vordt,
+            Anri,
+            CrystalSage,
+            Deacons,
+            AbyssWatchers,
+            Wolnir,
+            Pontiff,
+            Aldrich,
+            Yhorm,
+            Dancer,
+            DragonslayerArmour,
+            TwinPrinces,
+            SoulOfCinder,
+        })
+    { FlagsVerified = false };
+
+    /// <summary>
     /// The three bosses the scripted fake source plays through, for developing
     /// against <c>--fake</c> without the game.
     /// </summary>
@@ -119,5 +163,25 @@ public static class BuiltInRoutes
         new[] { IudexGundyr, Vordt, Greatwood })
     { FlagsVerified = false };
 
-    public static IReadOnlyList<RouteFile> All => new[] { Quick, AllBosses, AllBossesWithDlc, Demo };
+    public static IReadOnlyList<RouteFile> All =>
+        new[] { Quick, GlitchlessAnri, AllBosses, AllBossesWithDlc, Demo };
+
+    /// <summary>
+    /// Every split the route editor can offer, in progression order, each already
+    /// carrying its event-flag id.
+    ///
+    /// The point of a catalogue rather than a free-text box is that a split
+    /// picked from here <em>auto-advances</em>. Typing a boss's name by hand
+    /// produces a split that has to be advanced with the hotkey, which is a
+    /// perfectly good thing to want and is still possible — it just should not be
+    /// what happens by accident when someone meant to add Vordt.
+    /// </summary>
+    public static IReadOnlyList<RouteSplitFile> Catalogue => new[]
+    {
+        IudexGundyr, Vordt, Greatwood, Anri, CrystalSage, Deacons, AbyssWatchers,
+        Wolnir, OldDemonKing, Pontiff, Aldrich, Yhorm, Dancer,
+        DragonslayerArmour, Oceiros, ChampionGundyr, AncientWyvern, NamelessKing,
+        TwinPrinces, SisterFriede, Gravetender, DemonPrince, Halflight, Midir,
+        Gael, SoulOfCinder,
+    };
 }

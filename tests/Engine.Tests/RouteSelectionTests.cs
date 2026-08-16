@@ -52,13 +52,28 @@ public class RouteSelectionTests : IDisposable
         for (var i = 0; i < 25; i++) c.Tick(s, flags, 0);
     }
 
-    private RunController NewController() => new(
+    private RunController NewController() => NewController(new RouteStore(RoutesDir));
+
+    private RunController NewController(RouteStore routes) => new(
         new NoRecords(),
         new RunStateStore(Path.Combine(_dir, "run-state.json")),
-        new RouteStore(RoutesDir),
+        routes,
         new SettingsStore(Path.Combine(_dir, "settings.json")),
         new TrackingSettingsStore(Path.Combine(_dir, "tracking.json")),
+        new AttemptStore(Path.Combine(_dir, "attempts.json")),
+        new SplitNameStore(Path.Combine(_dir, "names.json")),
         NullLogger<RunController>.Instance);
+
+    /// <summary>
+    /// A controller and the very store it reads from. The editor tests write
+    /// routes and then ask the controller what it makes of the change, which only
+    /// means anything if both are looking at the same loaded list.
+    /// </summary>
+    private (RunController Controller, RouteStore Routes) NewPair()
+    {
+        var routes = new RouteStore(RoutesDir);
+        return (NewController(routes), routes);
+    }
 
     // --- the store ---
 
@@ -150,6 +165,392 @@ public class RouteSelectionTests : IDisposable
         Assert.Equal("Soul of Cinder", quick.Splits[^1].Name);
         Assert.True(quick.Splits.Count < BuiltInRoutes.AllBosses.Splits.Count);
         Assert.Equal(quick.Splits.Count, quick.AutoSplitCount);
+    }
+
+    [Fact]
+    public void TheGlitchlessAnriRouteRunsInTheOrderItIsMeantTo()
+    {
+        var route = BuiltInRoutes.GlitchlessAnri;
+
+        Assert.Equal(14, route.Splits.Count);
+        Assert.Equal(
+            new[]
+            {
+                "Iudex Gundyr", "Vordt of the Boreal Valley", "Anri of Astora", "Crystal Sage",
+                "Deacons of the Deep", "Abyss Watchers", "High Lord Wolnir", "Pontiff Sulyvahn",
+                "Aldrich, Devourer of Gods", "Yhorm the Giant", "Dancer of the Boreal Valley",
+                "Dragonslayer Armour", "Lothric, Younger Prince", "Soul of Cinder",
+            },
+            route.Splits.Select(s => s.Name));
+
+        // Anri is not a boss and has no boss flag. The split advances on the
+        // event flag the game sets when the straight sword is picked up, which
+        // is the moment the player asked to split on.
+        Assert.Equal(50006030u, route.Splits[2].DefeatFlagId);
+        Assert.Equal(route.Splits.Count, route.AutoSplitCount);
+        Assert.Equal(ChallengeType.NoHit, route.DefaultChallenge);
+    }
+
+    [Fact]
+    public void EveryCatalogueSplitCarriesAFlag()
+    {
+        // A split picked from the catalogue must auto-advance; that is the whole
+        // difference between picking one and typing a name.
+        Assert.NotEmpty(BuiltInRoutes.Catalogue);
+        Assert.All(BuiltInRoutes.Catalogue, s => Assert.NotNull(s.DefeatFlagId));
+
+        // And it must be able to build any built-in route out of what it offers.
+        var known = BuiltInRoutes.Catalogue.Select(s => s.Name).ToHashSet();
+        foreach (var route in BuiltInRoutes.All)
+        foreach (var split in route.Splits)
+            Assert.Contains(split.Name, known);
+    }
+
+    // --- the editor ---
+
+    [Fact]
+    public void SavingANewRouteWritesItAndItComesBack()
+    {
+        var store = new RouteStore(RoutesDir);
+        var result = store.Save(new RouteFile("My route", ChallengeType.NoHit, new[]
+        {
+            new RouteSplitFile("Iudex Gundyr", true, 14000800),
+            new RouteSplitFile("A checkpoint", false, null),
+        }));
+
+        Assert.True(result.Saved);
+        Assert.Equal("My route", result.Name);
+
+        var reloaded = new RouteStore(RoutesDir).Find("My route");
+        Assert.NotNull(reloaded);
+        Assert.Equal(2, reloaded!.Splits.Count);
+        Assert.Equal(1, reloaded.AutoSplitCount);
+    }
+
+    [Fact]
+    public void SavingCanReorderSplitsWithoutTouchingAnythingElse()
+    {
+        var store = new RouteStore(RoutesDir);
+        var quick = store.Find(BuiltInRoutes.Quick.Name)!;
+        var reversed = quick.Splits.Reverse().ToList();
+
+        Assert.True(store.Save(quick with { Splits = reversed }, replacing: quick.Name).Saved);
+
+        var after = new RouteStore(RoutesDir).Find(BuiltInRoutes.Quick.Name)!;
+        Assert.Equal(reversed.Select(s => s.Name), after.Splits.Select(s => s.Name));
+        Assert.Single(Directory.GetFiles(RoutesDir, "quick-route.json"));
+    }
+
+    [Fact]
+    public void RenamingLeavesNoFileBehindUnderTheOldName()
+    {
+        var store = new RouteStore(RoutesDir);
+        var quick = store.Find(BuiltInRoutes.Quick.Name)!;
+
+        Assert.True(store.Save(quick with { Name = "My quick route" }, replacing: quick.Name).Saved);
+
+        var reloaded = new RouteStore(RoutesDir);
+        Assert.NotNull(reloaded.Find("My quick route"));
+        Assert.Null(reloaded.Find(BuiltInRoutes.Quick.Name));
+    }
+
+    [Fact]
+    public void ANewRouteCannotTakeANameAlreadyInUse()
+    {
+        var store = new RouteStore(RoutesDir);
+        var result = store.Save(new RouteFile(
+            BuiltInRoutes.Quick.Name, ChallengeType.NoHit, new[] { new RouteSplitFile("A", false, null) }));
+
+        Assert.False(result.Saved);
+        Assert.NotNull(result.Error);
+
+        // And the route it collided with is untouched.
+        Assert.Equal(BuiltInRoutes.Quick.Splits.Count, store.Find(BuiltInRoutes.Quick.Name)!.Splits.Count);
+    }
+
+    [Fact]
+    public void RenamingOntoAnExistingNameIsRefused()
+    {
+        var store = new RouteStore(RoutesDir);
+        var quick = store.Find(BuiltInRoutes.Quick.Name)!;
+
+        var result = store.Save(quick with { Name = BuiltInRoutes.Demo.Name }, replacing: quick.Name);
+
+        Assert.False(result.Saved);
+        Assert.NotNull(store.Find(BuiltInRoutes.Quick.Name));
+        Assert.Equal(BuiltInRoutes.Demo.Splits.Count, store.Find(BuiltInRoutes.Demo.Name)!.Splits.Count);
+    }
+
+    [Fact]
+    public void ARouteWithNoUsableSplitsIsRefused()
+    {
+        var store = new RouteStore(RoutesDir);
+
+        Assert.False(store.Save(new RouteFile("Empty", ChallengeType.NoHit, Array.Empty<RouteSplitFile>())).Saved);
+        Assert.False(store.Save(new RouteFile("Blank splits", ChallengeType.NoHit, new[]
+        {
+            new RouteSplitFile("   ", false, null),
+        })).Saved);
+    }
+
+    [Fact]
+    public void ARouteWithNoUsableNameIsRefusedRatherThanWrittenSomewhereOdd()
+    {
+        var store = new RouteStore(RoutesDir);
+        var splits = new[] { new RouteSplitFile("Iudex Gundyr", true, 14000800u) };
+
+        Assert.False(store.Save(new RouteFile("   ", ChallengeType.NoHit, splits)).Saved);
+
+        // The file name comes from the route name, so a name that slugs to
+        // nothing has nowhere to go — and must not land on "routes/.json".
+        Assert.False(store.Save(new RouteFile("///", ChallengeType.NoHit, splits)).Saved);
+        Assert.False(File.Exists(Path.Combine(RoutesDir, ".json")));
+    }
+
+    [Fact]
+    public void NamesAreTrimmedAndBounded()
+    {
+        var store = new RouteStore(RoutesDir);
+        store.Save(new RouteFile("  Padded  ", ChallengeType.NoHit, new[]
+        {
+            new RouteSplitFile("  Iudex Gundyr  ", true, 14000800u),
+            new RouteSplitFile(new string('x', 500), false, null),
+        }));
+
+        var saved = new RouteStore(RoutesDir).Find("Padded");
+        Assert.NotNull(saved);
+        Assert.Equal("Iudex Gundyr", saved!.Splits[0].Name);
+        Assert.Equal(60, saved.Splits[1].Name.Length);
+    }
+
+    [Fact]
+    public void ARouteSavedFromTheEditorIsNeverMarkedVerified()
+    {
+        // Only a live game can earn that, and the editor is not a live game.
+        var store = new RouteStore(RoutesDir);
+        store.Save(new RouteFile("Claimed", ChallengeType.NoHit, new[]
+        {
+            new RouteSplitFile("Iudex Gundyr", true, 14000800u),
+        })
+        { FlagsVerified = true });
+
+        Assert.False(new RouteStore(RoutesDir).Find("Claimed")!.FlagsVerified);
+    }
+
+    [Fact]
+    public void DeletingRemovesTheFileAndTheRoute()
+    {
+        var store = new RouteStore(RoutesDir);
+
+        Assert.True(store.Delete(BuiltInRoutes.Quick.Name));
+        Assert.Null(store.Find(BuiltInRoutes.Quick.Name));
+        Assert.Null(new RouteStore(RoutesDir).Find(BuiltInRoutes.Quick.Name));
+
+        // Nothing to delete twice.
+        Assert.False(store.Delete(BuiltInRoutes.Quick.Name));
+    }
+
+    [Fact]
+    public void DeletingFindsTheFileByWhatIsInItRatherThanByItsName()
+    {
+        // A hand-written route file may be called anything at all.
+        Directory.CreateDirectory(RoutesDir);
+        var path = Path.Combine(RoutesDir, "zzz-whatever.json");
+        File.WriteAllText(path, """
+            {
+              "name": "Hand written",
+              "defaultChallenge": "NoHit",
+              "splits": [ { "name": "Iudex Gundyr", "isBoss": true, "defeatFlagId": 14000800 } ]
+            }
+            """);
+
+        var store = new RouteStore(RoutesDir);
+        Assert.True(store.Delete("Hand written"));
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void EditingAHandWrittenRouteKeepsItInItsOwnFile()
+    {
+        Directory.CreateDirectory(RoutesDir);
+        var path = Path.Combine(RoutesDir, "zzz-whatever.json");
+        File.WriteAllText(path, """
+            {
+              "name": "Hand written",
+              "defaultChallenge": "NoHit",
+              "splits": [ { "name": "Iudex Gundyr", "isBoss": true, "defeatFlagId": 14000800 } ]
+            }
+            """);
+
+        var store = new RouteStore(RoutesDir);
+        var route = store.Find("Hand written")!;
+        store.Save(route with { Splits = route.Splits.Append(new RouteSplitFile("Vordt", true, 13000800u)).ToList() },
+            replacing: "Hand written");
+
+        // Written back where it was, not duplicated under a slug.
+        Assert.True(File.Exists(path));
+        Assert.False(File.Exists(Path.Combine(RoutesDir, "hand-written.json")));
+        Assert.Equal(2, new RouteStore(RoutesDir).Find("Hand written")!.Splits.Count);
+    }
+
+    [Fact]
+    public void EditingTheSelectedRouteAbandonsTheRunInProgress()
+    {
+        var (c, store) = NewPair();
+        var flags = new NoFlags();
+
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+        Settle(c, Play(600_000, 1000), flags);
+        c.Tick(Play(601_000, 900), flags, 0);
+        Assert.Equal(1, c.Project(Play(601_000, 900)).TotalDamage);
+
+        var demo = store.Find(BuiltInRoutes.Demo.Name)!;
+        store.Save(demo with { Splits = demo.Splits.Take(2).ToList() }, replacing: demo.Name);
+        c.RoutesChanged(BuiltInRoutes.Demo.Name);
+
+        Assert.Equal("NotStarted", c.Project(GameSnapshot.Detached).Phase);
+
+        // And the next attempt runs the route as it is now.
+        Settle(c, Play(700_000, 1000), flags);
+        var state = c.Project(Play(700_000, 1000));
+        Assert.Equal(2, state.Splits.Count);
+        Assert.Equal(0, state.TotalDamage);
+    }
+
+    [Fact]
+    public void ReloadingAfterAnUnrelatedEditKeepsTheRunGoing()
+    {
+        // Route files are reloaded wholesale, so every save produces new objects
+        // even for routes nobody touched. Abandoning the run on all of them would
+        // mean saving some other route cost you your attempt.
+        var (c, store) = NewPair();
+        var flags = new NoFlags();
+
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+        Settle(c, Play(600_000, 1000), flags);
+        c.Tick(Play(601_000, 900), flags, 0);
+
+        var quick = store.Find(BuiltInRoutes.Quick.Name)!;
+        store.Save(quick with { Splits = quick.Splits.Take(3).ToList() }, replacing: quick.Name);
+        c.RoutesChanged();
+
+        var state = c.Project(GameSnapshot.Detached);
+        Assert.Equal("Running", state.Phase);
+        Assert.Equal(1, state.TotalDamage);
+    }
+
+    [Fact]
+    public void TheSelectionFollowsARenameRatherThanFallingBack()
+    {
+        var (c, store) = NewPair();
+        c.Select(BuiltInRoutes.Quick.Name, ChallengeType.NoHit);
+
+        var quick = store.Find(BuiltInRoutes.Quick.Name)!;
+        store.Save(quick with { Name = "My quick route" }, replacing: quick.Name);
+        c.RoutesChanged("My quick route");
+
+        Assert.Equal("My quick route", c.Project(GameSnapshot.Detached).RouteName);
+    }
+
+    [Fact]
+    public void DeletingTheSelectedRouteFallsBackToSomethingUsable()
+    {
+        var (c, store) = NewPair();
+        c.Select(BuiltInRoutes.Quick.Name, ChallengeType.NoHit);
+
+        store.Delete(BuiltInRoutes.Quick.Name);
+        c.RoutesChanged();
+
+        var name = c.Project(GameSnapshot.Detached).RouteName;
+        Assert.NotEqual(BuiltInRoutes.Quick.Name, name);
+        Assert.NotEmpty(name);
+    }
+
+    // --- attempts ---
+
+    [Fact]
+    public void EachRunCountsAsOneAttempt()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+        Assert.Equal(0, c.Attempts.Started);
+
+        Settle(c, Play(600_000, 1000), flags);
+        Assert.Equal(1, c.Attempts.Started);
+        Assert.Equal(1, c.Project(Play(600_000, 1000)).Attempts.Started);
+
+        // Playing on is not another attempt.
+        for (var i = 0; i < 50; i++) c.Tick(Play(600_000 + i * 100, 1000), flags, 0);
+        Assert.Equal(1, c.Attempts.Started);
+
+        // Starting over is.
+        c.Reset();
+        Settle(c, Play(1_000, 1000), flags);
+        Assert.Equal(2, c.Attempts.Started);
+    }
+
+    [Fact]
+    public void AttemptsAreCountedPerChallenge()
+    {
+        var c = NewController();
+        var flags = new NoFlags();
+
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+        Settle(c, Play(600_000, 1000), flags);
+
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.Speedrun);
+        Assert.Equal(0, c.Attempts.Started);
+
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+        Assert.Equal(1, c.Attempts.Started);
+    }
+
+    [Fact]
+    public void TheAttemptCountSurvivesTheSession()
+    {
+        var first = NewController();
+        first.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+        Settle(first, Play(600_000, 1000), new NoFlags());
+
+        Assert.Equal(1, NewController().Attempts.Started);
+    }
+
+    [Fact]
+    public void TheAttemptCountCanBeSetByHand()
+    {
+        var c = NewController();
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+
+        Assert.Equal(312, c.SetAttempts(312, 4).Started);
+        Assert.Equal(312, c.Project(GameSnapshot.Detached).Attempts.Started);
+        Assert.Equal(4, c.Project(GameSnapshot.Detached).Attempts.Finished);
+    }
+
+    // --- display names ---
+
+    [Fact]
+    public void ARenamedSplitCarriesALabelAndKeepsItsName()
+    {
+        Directory.CreateDirectory(_dir);
+        var names = new SplitNameStore(Path.Combine(_dir, "names.json"));
+        names.Update(new Dictionary<string, string> { ["Iudex Gundyr"] = "Gundyr" });
+
+        var c = NewController();
+        c.Select(BuiltInRoutes.Demo.Name, ChallengeType.NoHit);
+        Settle(c, Play(600_000, 1000), new NoFlags());
+
+        var splits = c.Project(Play(600_000, 1000)).Splits;
+
+        // The name is what everything else is filed under - the personal bests
+        // above all - so it stays canonical and the label sits beside it.
+        Assert.Equal("Iudex Gundyr", splits[0].Name);
+        Assert.Equal("Gundyr", splits[0].Label);
+
+        // Nothing else is renamed, and an unrenamed split carries no label at all
+        // rather than a copy of its own name.
+        Assert.Null(splits[1].Label);
     }
 
     [Fact]

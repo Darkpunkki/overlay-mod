@@ -22,6 +22,7 @@
     runTimer: el("runTimer"),
     runPb: el("runPb"),
     profileName: el("profileName"),
+    attempts: el("attempts"),
     splits: el("splits"),
     totals: el("totals"),
     primaryLabel: el("primaryLabel"),
@@ -34,6 +35,15 @@
   // tall no matter how long the route is, so a 25-boss route needs no more room
   // than a 3-boss one. Set it on the control page, or with ?splits=N.
   let visibleSplits = 6;
+
+  // Whether the attempt count is shown. Comes from the appearance settings.
+  let showAttempts = true;
+
+  // Which settings this URL asked for by hand. The appearance settings arrive
+  // after the page has already read its query string, so without this a
+  // ?scale= or ?splits= would be silently overwritten a fraction of a second
+  // after taking effect — which looks exactly like the parameter not working.
+  const fromUrl = new Set();
 
   // Treat the stream as dead if nothing arrives for this long. The host ticks
   // at 30Hz, so this is a very generous margin.
@@ -57,7 +67,8 @@
   // setting them — no layout code needs to know a theme changed.
   function applyAppearance(s) {
     const root = document.documentElement.style;
-    root.setProperty("--om-scale", s.scale);
+    if (!fromUrl.has("scale")) root.setProperty("--om-scale", s.scale);
+    root.setProperty("--om-timer-scale", Number.isFinite(s.timerScale) ? s.timerScale : 1);
     root.setProperty("--om-text", s.text);
     root.setProperty("--om-text-dim", s.dim);
     root.setProperty("--om-text-faint", rgba(s.dim, 0.72));
@@ -67,7 +78,9 @@
     root.setProperty("--om-plate", rgba(s.plate, s.plateOpacity));
     root.setProperty("--om-shadow", `0 1px 3px rgb(0 0 0 / ${Math.round(s.shadowStrength * 100)}%)`);
 
-    if (Number.isFinite(s.visibleSplits)) visibleSplits = s.visibleSplits;
+    if (Number.isFinite(s.visibleSplits) && !fromUrl.has("splits")) visibleSplits = s.visibleSplits;
+
+    showAttempts = s.showAttempts !== false;
   }
 
   async function refreshAppearance(version) {
@@ -90,10 +103,14 @@
     const scale = Number.parseFloat(params.get("scale"));
     if (Number.isFinite(scale) && scale > 0) {
       document.documentElement.style.setProperty("--om-scale", Math.min(Math.max(scale, 0.5), 4));
+      fromUrl.add("scale");
     }
 
     const splits = Number.parseInt(params.get("splits") ?? "", 10);
-    if (Number.isFinite(splits)) visibleSplits = Math.min(Math.max(splits, 1), 30);
+    if (Number.isFinite(splits)) {
+      visibleSplits = Math.min(Math.max(splits, 1), 30);
+      fromUrl.add("splits");
+    }
 
     // Only ever build a same-origin path from a restricted character set, so a
     // crafted URL cannot pull in a stylesheet from somewhere else.
@@ -196,7 +213,10 @@
 
       const name = document.createElement("span");
       name.className = "split__name";
-      name.textContent = s.name;
+      // The label is what this split is called on screen; the name is what it
+      // is called everywhere else, personal bests included. Absent unless the
+      // split has actually been renamed.
+      name.textContent = s.label || s.name;
 
       const cls = started ? comparisonClass(value, best) : "";
 
@@ -216,6 +236,18 @@
     }
 
     dom.splits.replaceChildren(...rows);
+  }
+
+  // How many attempts this route has seen under this challenge. Counted by the
+  // host, which is the only thing that knows when a run really began — a page
+  // reload is not a new attempt, and neither is opening a second browser.
+  //
+  // Nothing is shown before the first attempt: "attempt 0" is a number that has
+  // never been true, and an empty overlay says "not started" better.
+  function renderAttempts(state) {
+    const started = state.attempts?.started ?? 0;
+    dom.attempts.hidden = !showAttempts || started <= 0;
+    if (!dom.attempts.hidden) dom.attempts.textContent = `attempt ${started}`;
   }
 
   function renderTotals(state) {
@@ -266,6 +298,7 @@
     dom.runTimer.textContent = formatTime(state.runIgtMs);
     dom.profileName.textContent = state.profileName || "";
 
+    renderAttempts(state);
     renderSplits(state);
     renderTotals(state);
     renderStatus(state);

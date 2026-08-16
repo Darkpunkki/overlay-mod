@@ -15,9 +15,14 @@
         <!-- The route name used to sit here. It is chosen once and never
              changes mid-run, so on screen it was a label nobody read. -->
         <span class="run__profile" id="profileName"></span>
-        <!-- The whole-run best. Shown for challenges with no totals footer,
-             which would otherwise repeat the timer directly above it. -->
-        <span class="run__pb" id="runPb" hidden></span>
+        <span class="run__meta-right">
+          <!-- How many attempts this route has seen under this challenge.
+               Hidden when switched off in the appearance settings. -->
+          <span class="run__attempts" id="attempts" hidden></span>
+          <!-- The whole-run best. Shown for challenges with no totals footer,
+               which would otherwise repeat the timer directly above it. -->
+          <span class="run__pb" id="runPb" hidden></span>
+        </span>
       </div>
     </header>
 

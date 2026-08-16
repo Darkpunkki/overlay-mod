@@ -76,6 +76,8 @@ public class RunResumeTests : IDisposable
         new RouteStore(Path.Combine(_dir, "routes")),
         new SettingsStore(Path.Combine(_dir, "settings.json")),
         new TrackingSettingsStore(Path.Combine(_dir, "tracking.json")),
+        new AttemptStore(Path.Combine(_dir, "attempts.json")),
+        new SplitNameStore(Path.Combine(_dir, "names.json")),
         NullLogger<RunController>.Instance);
 
     /// <summary>

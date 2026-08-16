@@ -30,6 +30,61 @@
         edit them freely, then reload.
       </p>
       <div class="choices choices--stack" id="routes"></div>
+
+      <div class="row">
+        <button class="btn btn--quiet" id="routeEdit" type="button">Edit selected</button>
+        <button class="btn btn--quiet" id="routeCopy" type="button">Duplicate selected</button>
+        <button class="btn btn--quiet" id="routeNew" type="button">New route</button>
+      </div>
+
+      <!-- The editor. Splits are the point of it, so they get the room; the name
+           and challenge sit above because they are set once and left alone. -->
+      <div class="editor" id="routeEditor" hidden>
+        <div class="editor__head">
+          <label class="field field--text">
+            <span class="field__label">Name</span>
+            <input class="text" type="text" id="edName" maxlength="60" autocomplete="off">
+          </label>
+          <label class="field field--text">
+            <span class="field__label">Challenge</span>
+            <select class="text" id="edChallenge"></select>
+          </label>
+        </div>
+        <p class="hint">
+          The challenge here is only this route's default — whichever you pick at
+          the top of the page still wins.
+        </p>
+        <p class="hint hint--warn" id="edRenameWarning" hidden>
+          Renaming a route starts its personal bests over, because they are filed
+          under its name.
+        </p>
+
+        <ol class="splitlist" id="edSplits"></ol>
+
+        <div class="row">
+          <select class="text text--grow" id="edCatalogue"></select>
+          <button class="btn btn--quiet" id="edAddBoss" type="button">Add boss</button>
+        </div>
+        <div class="row">
+          <input class="text text--grow" type="text" id="edCustom" maxlength="60"
+                 placeholder="Anything else — a bonfire, an item, a checkpoint" autocomplete="off">
+          <button class="btn btn--quiet" id="edAddCustom" type="button">Add manual split</button>
+        </div>
+        <p class="hint">
+          A boss from the list brings its event flag with it, so that split
+          advances on its own. Anything you type has no flag and needs the split
+          hotkey — which is a perfectly good way to run, just not a surprise you
+          want when you meant to add Vordt.
+        </p>
+
+        <div class="row">
+          <button class="btn" id="edSave" type="button">Save route</button>
+          <button class="btn btn--quiet" id="edCancel" type="button">Cancel</button>
+          <button class="btn btn--quiet btn--danger" id="edDelete" type="button">Delete this route</button>
+        </div>
+        <p class="hint hint--warn" id="edError" hidden></p>
+      </div>
+
       <div class="row">
         <button class="btn btn--quiet" id="reload" type="button">Reload from disk</button>
         <button class="btn btn--quiet" id="restore" type="button">Restore built-in routes</button>
@@ -39,6 +94,24 @@
         keeps it deleted. <strong>Restore</strong> writes back any that are
         missing — including routes added in a newer version.
       </p>
+    </details>
+
+    <details class="card" id="cardNames">
+      <summary class="card__head"><h2>Split names</h2></summary>
+      <p class="hint">
+        What the overlay calls each split, where you would rather it said
+        something shorter. Leave a box empty to use the name from the route.
+      </p>
+      <p class="hint">
+        Only the display changes. Personal bests are filed under the name in the
+        route file, so renaming here never loses the history behind a boss — which
+        is why this exists instead of editing the route.
+      </p>
+      <div class="row">
+        <button class="btn btn--quiet" id="namesShort" type="button">Use short names</button>
+        <button class="btn btn--quiet" id="namesClear" type="button">Clear all</button>
+      </div>
+      <div class="names" id="names"></div>
     </details>
 
     <details class="card" id="cardRun" open>
@@ -56,6 +129,21 @@
       <p class="hint">
         Global hotkeys work while the game has focus. Change them in
         <code>appdata/hotkeys.json</code> and restart the host.
+      </p>
+
+      <h3 class="card__sub">Attempts</h3>
+      <div class="row row--baseline">
+        <label class="field field--inline">
+          <span class="field__label">Attempt</span>
+          <input class="text text--number" type="number" id="atCount" min="0" max="999999" step="1">
+        </label>
+        <button class="btn btn--quiet" id="atSet" type="button">Set</button>
+        <button class="btn btn--quiet" id="atReset" type="button">Reset to zero</button>
+      </div>
+      <p class="hint" id="attemptsNote">
+        Counted per route and challenge, and it goes up whenever a run starts —
+        loading in, a reset, or a fresh character. Set it by hand if you are
+        arriving with a tally from somewhere else.
       </p>
     </details>
 
@@ -75,6 +163,14 @@
           <span class="field__label">Size</span>
           <input type="range" id="apScale" min="0.5" max="3" step="0.05">
           <output class="field__value" id="apScaleOut">1.00×</output>
+        </label>
+
+        <!-- On top of Size, not instead of it. The clock is read from across a
+             room; the split list is not. -->
+        <label class="field">
+          <span class="field__label">Clock size</span>
+          <input type="range" id="apTimerScale" min="0.4" max="3" step="0.05">
+          <output class="field__value" id="apTimerScaleOut">1.00×</output>
         </label>
 
         <label class="field">
@@ -104,6 +200,14 @@
         How many boss names the overlay shows at once. The list scrolls through
         longer routes, so this is the overlay's height, not the route's length —
         set it to the full split count to show a whole route with no scrolling.
+      </p>
+
+      <label class="check">
+        <input type="checkbox" id="apShowAttempts">
+        <span>Show the attempt count</span>
+      </label>
+      <p class="hint">
+        Sits beside the challenge name. Nothing is shown until the first attempt.
       </p>
 
       <div class="swatches">
@@ -207,6 +311,7 @@
         <dt>Phase</dt><dd id="factPhase">—</dd>
         <dt>Timer</dt><dd id="factTimer">—</dd>
         <dt>Split</dt><dd id="factSplit">—</dd>
+        <dt>Attempt</dt><dd id="factAttempt">—</dd>
         <!-- Health is never shown on the overlay — the game already shows it,
              and it would cost space for nothing. Here it is the single most
              useful fact when counters are not moving, because damage, hits and

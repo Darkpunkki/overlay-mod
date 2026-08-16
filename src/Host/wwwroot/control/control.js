@@ -23,6 +23,7 @@
     factPhase: el("factPhase"),
     factTimer: el("factTimer"),
     factSplit: el("factSplit"),
+    factAttempt: el("factAttempt"),
     factHealth: el("factHealth"),
     overlayUrl: el("overlayUrl"),
     hotkeys: el("hotkeys"),
@@ -30,9 +31,27 @@
     fdCeiling: el("fdCeiling"),
     quit: el("quit"),
     toast: el("toast"),
+
+    routeEdit: el("routeEdit"),
+    routeCopy: el("routeCopy"),
+    routeNew: el("routeNew"),
+    routeEditor: el("routeEditor"),
+    edName: el("edName"),
+    edChallenge: el("edChallenge"),
+    edRenameWarning: el("edRenameWarning"),
+    edSplits: el("edSplits"),
+    edCatalogue: el("edCatalogue"),
+    edCustom: el("edCustom"),
+    edDelete: el("edDelete"),
+    edError: el("edError"),
+
+    names: el("names"),
+    atCount: el("atCount"),
   };
 
-  let catalogue = null;
+  // The /api/routes payload: what is selected, every route with its splits, the
+  // challenges, and the catalogue of bosses the editor can add.
+  let routeInfo = null;
   let toastTimer = 0;
 
   // What each challenge actually measures. Four names on four buttons do not
@@ -74,6 +93,8 @@
   // a setting to one line here rather than a block of near-identical handlers.
   const APPEARANCE = [
     { key: "scale", input: "apScale", out: "apScaleOut", number: true, format: (v) => `${(+v).toFixed(2)}×` },
+    { key: "timerScale", input: "apTimerScale", out: "apTimerScaleOut", number: true, format: (v) => `${(+v).toFixed(2)}×` },
+    { key: "showAttempts", input: "apShowAttempts", boolean: true },
     { key: "plateOpacity", input: "apPlateOpacity", out: "apPlateOpacityOut", number: true, format: (v) => `${Math.round(v * 100)}%` },
     { key: "shadowStrength", input: "apShadow", out: "apShadowOut", number: true, format: (v) => `${Math.round(v * 100)}%` },
     { key: "visibleSplits", input: "apSplits", number: true, integer: true },
@@ -180,7 +201,7 @@
   }
 
   function render() {
-    const { selected, challenges, routes } = catalogue;
+    const { selected, challenges, routes } = routeInfo;
 
     dom.challenges.replaceChildren(...challenges.map((c) =>
       choice({
@@ -192,10 +213,10 @@
     dom.challengeNote.textContent = CHALLENGE_NOTES[selected.challenge] ?? "";
 
     dom.routes.replaceChildren(...routes.map((r) => {
-      const manual = r.splits - r.autoSplits;
+      const manual = r.splitCount - r.autoSplits;
       return choice({
         label: r.name,
-        meta: `${r.splits} splits · ${r.autoSplits} auto-advance`,
+        meta: `${r.splitCount} splits · ${r.autoSplits} auto-advance`,
         // Unconfirmed flag ids fail silently, so this is worth saying plainly.
         warn: manual > 0
           ? `${manual} need a manual split — boss flags not confirmed yet`
@@ -204,10 +225,16 @@
         onPick: () => select(r.name, selected.challenge),
       });
     }));
+
+    showAttempts(routeInfo.attempts);
+    renderNames();
   }
 
+  const selectedRoute = () =>
+    routeInfo?.routes.find((r) => r.name === routeInfo.selected.route) ?? null;
+
   async function loadCatalogue() {
-    catalogue = await (await fetch("/api/routes")).json();
+    routeInfo = await (await fetch("/api/routes")).json();
     render();
   }
 
@@ -347,7 +374,7 @@
   for (const field of APPEARANCE) {
     const input = el(field.input);
     if (!input) continue;
-    input.addEventListener("input", () => {
+    input.addEventListener(field.boolean ? "change" : "input", () => {
       onEdit(field, input,
         () => appearance, (next) => { appearance = next; },
         () => { clearTimeout(appearanceTimer); appearanceTimer = setTimeout(saveAppearance, 150); });
@@ -410,6 +437,332 @@
       toast("Hit-detection settings reset");
     } catch (err) {
       toast(`Reset failed: ${err.message}`);
+    }
+  });
+
+  // --- route editor ---
+  //
+  // Route files were always hand-editable; this is the same thing without the
+  // JSON. It works on a copy of the route and writes nothing until Save, so
+  // backing out costs nothing and a half-finished edit never reaches the disk.
+
+  let editor = null;
+
+  function openEditor({ from = null, copy = false } = {}) {
+    if (!routeInfo) return;
+
+    editor = from
+      ? {
+          // A copy is a new route, so it has nothing to replace. Editing does,
+          // and that is what tells a rename from a name collision server-side.
+          original: copy ? null : from.name,
+          name: copy ? `${from.name} (copy)` : from.name,
+          challenge: from.defaultChallenge,
+          splits: from.splits.map((s) => ({ ...s })),
+        }
+      : { original: null, name: "", challenge: routeInfo.selected.challenge, splits: [] };
+
+    // The two pickers are filled once per opening rather than on every render:
+    // rebuilding a <select> resets it, and adding six bosses in a row would mean
+    // re-finding your place in the list six times.
+    dom.edChallenge.replaceChildren(...routeInfo.challenges.map((c) => {
+      const option = document.createElement("option");
+      option.value = c.type;
+      option.textContent = c.name;
+      option.selected = c.type === editor.challenge;
+      return option;
+    }));
+
+    dom.edCatalogue.replaceChildren(...routeInfo.catalogue.map((s, i) => {
+      const option = document.createElement("option");
+      option.value = String(i);
+      option.textContent = s.name;
+      return option;
+    }));
+
+    dom.edError.hidden = true;
+    dom.routeEditor.hidden = false;
+    renderEditor();
+    dom.edName.focus();
+  }
+
+  function closeEditor() {
+    editor = null;
+    dom.routeEditor.hidden = true;
+  }
+
+  function renderEditor() {
+    if (!editor) return;
+
+    dom.edName.value = editor.name;
+    dom.edDelete.hidden = !editor.original;
+    showRenameWarning();
+
+    if (!editor.splits.length) {
+      const empty = document.createElement("li");
+      empty.className = "splitlist__empty";
+      empty.textContent = "No splits yet — add one below.";
+      dom.edSplits.replaceChildren(empty);
+      return;
+    }
+
+    dom.edSplits.replaceChildren(...editor.splits.map((split, i) => {
+      const row = document.createElement("li");
+      row.className = "splitrow";
+      // Which splits will advance on their own is the one thing about a
+      // hand-built route that reading it does not tell you.
+      row.classList.toggle("splitrow--manual", split.defeatFlagId === null || split.defeatFlagId === undefined);
+
+      for (const [text, cls] of [
+        [String(i + 1), "splitrow__index"],
+        [split.name, "splitrow__name"],
+        [split.defeatFlagId ? `flag ${split.defeatFlagId}` : "manual", "splitrow__flag"],
+      ]) {
+        const cell = document.createElement("span");
+        cell.className = cls;
+        cell.textContent = text;
+        row.append(cell);
+      }
+
+      for (const [label, title, disabled, onClick] of [
+        ["↑", "Move up", i === 0, () => moveSplit(i, -1)],
+        ["↓", "Move down", i === editor.splits.length - 1, () => moveSplit(i, 1)],
+        ["✕", "Remove", false, () => { editor.splits.splice(i, 1); renderEditor(); }],
+      ]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "iconbtn";
+        button.textContent = label;
+        button.title = title;
+        button.disabled = disabled;
+        button.addEventListener("click", onClick);
+        row.append(button);
+      }
+
+      return row;
+    }));
+  }
+
+  // Renaming re-keys the personal bests, which is worth saying before it happens
+  // rather than being asked about afterwards.
+  function showRenameWarning() {
+    dom.edRenameWarning.hidden = !editor?.original || editor.original === editor.name.trim();
+  }
+
+  function moveSplit(index, by) {
+    const to = index + by;
+    if (!editor || to < 0 || to >= editor.splits.length) return;
+
+    const [moved] = editor.splits.splice(index, 1);
+    editor.splits.splice(to, 0, moved);
+    renderEditor();
+  }
+
+  function addSplit(split) {
+    if (!editor) return;
+    editor.splits.push(split);
+    renderEditor();
+    dom.edSplits.scrollTop = dom.edSplits.scrollHeight;
+  }
+
+  dom.routeEdit.addEventListener("click", () => {
+    const route = selectedRoute();
+    if (route) openEditor({ from: route });
+  });
+
+  dom.routeCopy.addEventListener("click", () => {
+    const route = selectedRoute();
+    if (route) openEditor({ from: route, copy: true });
+  });
+
+  dom.routeNew.addEventListener("click", () => openEditor());
+
+  dom.edName.addEventListener("input", () => {
+    if (!editor) return;
+    editor.name = dom.edName.value;
+    showRenameWarning();
+  });
+
+  dom.edChallenge.addEventListener("change", () => {
+    if (editor) editor.challenge = dom.edChallenge.value;
+  });
+
+  el("edAddBoss").addEventListener("click", () => {
+    const pick = routeInfo?.catalogue[Number.parseInt(dom.edCatalogue.value, 10)];
+    if (pick) addSplit({ ...pick });
+  });
+
+  el("edAddCustom").addEventListener("click", () => {
+    const name = dom.edCustom.value.trim();
+    if (!name) return;
+
+    addSplit({ name, isBoss: false, defeatFlagId: null });
+    dom.edCustom.value = "";
+  });
+
+  dom.edCustom.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); el("edAddCustom").click(); }
+  });
+
+  el("edSave").addEventListener("click", async () => {
+    if (!editor) return;
+
+    dom.edError.hidden = true;
+    try {
+      const { name } = await post("/api/routes/save", {
+        replacing: editor.original,
+        name: editor.name,
+        challenge: editor.challenge,
+        splits: editor.splits.map((s) => ({
+          name: s.name,
+          isBoss: !!s.isBoss,
+          defeatFlagId: s.defeatFlagId ?? null,
+        })),
+      });
+
+      closeEditor();
+      await loadCatalogue();
+      toast(`Saved ${name}`);
+    } catch (err) {
+      // In the editor rather than as a toast: this is a correctable mistake in
+      // what is on screen, and it should stay on screen until it is corrected.
+      dom.edError.textContent = err.message;
+      dom.edError.hidden = false;
+    }
+  });
+
+  el("edCancel").addEventListener("click", closeEditor);
+
+  dom.edDelete.addEventListener("click", async () => {
+    if (!editor?.original) return;
+    if (!window.confirm(`Delete the route "${editor.original}"? Its personal bests are kept.`)) return;
+
+    try {
+      await post("/api/routes/delete", { name: editor.original });
+      closeEditor();
+      await loadCatalogue();
+      toast("Route deleted");
+    } catch (err) {
+      dom.edError.textContent = err.message;
+      dom.edError.hidden = false;
+    }
+  });
+
+  // --- split names ---
+
+  let names = {};
+  let namesTimer = 0;
+
+  async function loadNames() {
+    ({ names } = await (await fetch("/api/names")).json());
+    renderNames();
+  }
+
+  // Rows for the route currently selected, because those are the names actually
+  // on screen. A rename set on another route keeps its entry in the file — it is
+  // simply not listed until that route is selected.
+  function renderNames() {
+    const route = selectedRoute();
+    const canonical = [...new Set((route?.splits ?? []).map((s) => s.name))];
+
+    if (!canonical.length) {
+      dom.names.replaceChildren(Object.assign(document.createElement("p"), {
+        className: "hint",
+        textContent: "Select a route to rename its splits.",
+      }));
+      return;
+    }
+
+    dom.names.replaceChildren(...canonical.map((name) => {
+      const row = document.createElement("div");
+      row.className = "namerow";
+
+      const label = document.createElement("span");
+      label.className = "namerow__canonical";
+      label.textContent = name;
+
+      const input = document.createElement("input");
+      input.className = "text";
+      input.type = "text";
+      input.maxLength = 40;
+      input.placeholder = name;
+      input.value = names[name] ?? "";
+      input.addEventListener("input", () => {
+        const value = input.value.trim();
+        if (value) names[name] = value;
+        else delete names[name];
+
+        clearTimeout(namesTimer);
+        namesTimer = setTimeout(saveNames, 300);
+      });
+
+      row.append(label, input);
+      return row;
+    }));
+  }
+
+  async function saveNames() {
+    try {
+      // Deliberately does not re-render: the boxes already hold what was typed,
+      // and rebuilding them would take the caret with it.
+      ({ names } = await post("/api/names", { names }));
+    } catch (err) {
+      toast(`Could not save names: ${err.message}`);
+    }
+  }
+
+  for (const [id, path, label] of [
+    ["namesShort", "/api/names/short", "Short names applied"],
+    ["namesClear", "/api/names/reset", "Names cleared"],
+  ]) {
+    el(id).addEventListener("click", async () => {
+      try {
+        ({ names } = await post(path));
+        renderNames();
+        toast(label);
+      } catch (err) {
+        toast(`Failed: ${err.message}`);
+      }
+    });
+  }
+
+  // --- attempts ---
+
+  let attempts = null;
+
+  function showAttempts(next) {
+    if (!next) return;
+    if (attempts && next.started === attempts.started && next.finished === attempts.finished) return;
+
+    attempts = next;
+    dom.factAttempt.textContent = next.finished > 0
+      ? `${next.started} (${next.finished} finished)`
+      : String(next.started);
+
+    // Never overwrite a number being typed in.
+    if (document.activeElement !== dom.atCount) dom.atCount.value = next.started;
+  }
+
+  el("atSet").addEventListener("click", async () => {
+    const started = Math.max(0, Number.parseInt(dom.atCount.value, 10) || 0);
+    try {
+      const applied = await post("/api/attempts", { started, finished: attempts?.finished ?? 0 });
+      showAttempts(applied.attempts);
+      toast(`Attempt count set to ${applied.attempts.started}`);
+    } catch (err) {
+      toast(`Could not set the attempt count: ${err.message}`);
+    }
+  });
+
+  el("atReset").addEventListener("click", async () => {
+    if (!window.confirm("Set the attempt count for this route and challenge back to zero?")) return;
+
+    try {
+      const applied = await post("/api/attempts/reset");
+      showAttempts(applied.attempts);
+      toast("Attempt count reset");
+    } catch (err) {
+      toast(`Could not reset the attempt count: ${err.message}`);
     }
   });
 
@@ -534,6 +887,10 @@
     dom.factSplit.textContent = active
       ? `${state.activeIndex + 1}/${state.splits.length} — ${active.name}`
       : "—";
+
+    // The stream is the live source: an attempt begins when the host says so,
+    // not when this page last asked.
+    showAttempts(state.attempts);
   }
 
   dom.overlayUrl.textContent = `${window.location.origin}/overlay/`;
@@ -595,6 +952,7 @@
 
   restoreSections();
   loadCatalogue().catch((err) => toast(`Could not load routes: ${err.message}`));
+  loadNames().catch((err) => toast(`Could not load split names: ${err.message}`));
   loadAbout().catch(() => { /* the version is a nicety, not a requirement */ });
   loadHotkeys().catch(() => { /* hotkeys are optional; the buttons still work */ });
   loadAppearance().catch((err) => toast(`Could not load appearance: ${err.message}`));

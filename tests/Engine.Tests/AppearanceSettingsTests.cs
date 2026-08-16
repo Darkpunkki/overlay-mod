@@ -67,6 +67,34 @@ public class AppearanceSettingsTests
         Assert.Equal(expected, (AppearanceSettings.Default with { VisibleSplits = given }).Sanitised().VisibleSplits);
     }
 
+    [Theory]
+    [InlineData(0.1, 0.4)]      // below the floor
+    [InlineData(99, 3.0)]       // above the ceiling
+    [InlineData(1.8, 1.8)]      // in range
+    public void TimerScaleIsClamped(double given, double expected)
+    {
+        Assert.Equal(expected, (AppearanceSettings.Default with { TimerScale = given }).Sanitised().TimerScale);
+    }
+
+    [Fact]
+    public void TheClockSizeIsIndependentOfTheOverallSize()
+    {
+        // Two multipliers rather than one, because the clock is read from across
+        // a room and the split list is not. Scaling everything to get a bigger
+        // clock costs the space the splits need.
+        var sanitised = (AppearanceSettings.Default with { Scale = 1.0, TimerScale = 2.0 }).Sanitised();
+
+        Assert.Equal(1.0, sanitised.Scale);
+        Assert.Equal(2.0, sanitised.TimerScale);
+    }
+
+    [Fact]
+    public void TheAttemptCountIsShownUnlessTurnedOff()
+    {
+        Assert.True(AppearanceSettings.Default.ShowAttempts);
+        Assert.False((AppearanceSettings.Default with { ShowAttempts = false }).Sanitised().ShowAttempts);
+    }
+
     [Fact]
     public void FullyTransparentPanelIsAllowed()
     {

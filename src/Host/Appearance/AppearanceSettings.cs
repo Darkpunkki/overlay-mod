@@ -16,6 +16,26 @@ public sealed partial record AppearanceSettings
     public double Scale { get; init; } = 1.0;
 
     /// <summary>
+    /// The run clock's size, on top of <see cref="Scale"/>.
+    ///
+    /// Separate because the clock and the split list are read by different people
+    /// for different reasons: the clock is for the viewer, at a glance, from
+    /// across a room, while the split list is detail. Scaling the whole overlay to
+    /// get a bigger clock costs the space the splits need, so this multiplies only
+    /// the timer — the rest of the overlay stays where it was.
+    /// </summary>
+    public double TimerScale { get; init; } = 1.0;
+
+    /// <summary>
+    /// Whether the attempt count appears beside the challenge name.
+    ///
+    /// On by default: an attempt counter is standard on a run overlay, and the
+    /// number is the thing a No-Hit viewer asks about first. It is one small line
+    /// and it turns off in one click for anyone who would rather not show it.
+    /// </summary>
+    public bool ShowAttempts { get; init; } = true;
+
+    /// <summary>
     /// How many split rows show at once. The list scrolls through longer routes,
     /// so this is the overlay's height rather than the route's length: one row
     /// for a minimal display, or thirty to show a whole All Bosses route at once.
@@ -52,6 +72,8 @@ public sealed partial record AppearanceSettings
         return new AppearanceSettings
         {
             Scale = Math.Clamp(double.IsFinite(Scale) ? Scale : d.Scale, 0.5, 3.0),
+            TimerScale = Math.Clamp(double.IsFinite(TimerScale) ? TimerScale : d.TimerScale, 0.4, 3.0),
+            ShowAttempts = ShowAttempts,
             VisibleSplits = Math.Clamp(VisibleSplits, 1, 30),
             Text = Colour(Text, d.Text),
             Dim = Colour(Dim, d.Dim),

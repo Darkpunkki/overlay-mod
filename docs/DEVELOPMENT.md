@@ -99,9 +99,17 @@ All under the data directory (`appdata` beside the executable by default):
 | `records.json` | Finished runs, and per-split bests |
 | `run-state.json` | The run in progress, so it survives a restart |
 | `settings.json` | Selected route and challenge |
+| `attempts.json` | How many attempts each route has seen, per challenge |
+| `names.json` | What each split is called on the overlay, where that differs from the route |
+| `tracking.json` | Fall and damage-over-time thresholds |
 | `appearance.json` | Overlay colours, size, transparency |
 | `hotkeys.json` | Key bindings |
 | `overlaymod.log` | The log |
+
+`attempts.json` and `names.json` are both deliberately outside `records.json`.
+Attempts are not a result and are not folded into a minimum, and split names are
+a *view* — the personal bests underneath stay keyed on the route's own names, so
+a rename cannot orphan them.
 
 ## Working on the memory layer
 

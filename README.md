@@ -128,6 +128,11 @@ behind swaps them, so the better number is always the green one.
 A run is never failed automatically. Take a hit in a No Hit run and it keeps
 counting — finish the attempt and see how it compares.
 
+**Dying counts as a hit, whatever killed you** — a fall, poison, a bottomless
+pit. Falls and poison are set aside from the No Hit count everywhere except when
+they kill you, which is the settled convention among No-Hit runners and the one
+reading that cannot make an invalid run look valid.
+
 ### How falls and poison are told apart
 
 **Falls, by watching how far you dropped just before you lost health:** more than
@@ -141,6 +146,10 @@ over the size ceiling (8% of your health by default) and counts as a hit the
 moment it lands. Because it takes a fourth bite to see the rhythm, the first
 three wait a couple of seconds before being called — so a genuinely small hit
 shows up a little late rather than a poison tick showing up at all.
+
+**Neither applies to a killing blow.** Both exist to set aside damage you were
+not really dealt, and neither reading survives you dying of it. A fatal fall and
+a poisoning you never cured are hits.
 
 Neither of these is **a reading of what damaged you**. The game does record that,
 but through a pointer chain this project has not found. So both will get things
@@ -167,13 +176,31 @@ Two kinds, and they are earned differently:
 | Route | Splits |
 |---|---|
 | **Quick route** | 13 — a normal completion |
+| **Glitchless route, Anri** | 14 — the No-Hit glitchless route, via Anri |
 | **All Bosses (main game)** | 19 |
 | **All Bosses (with DLC)** | 25 |
 | **Demo** | 3 — for trying things out without the game |
 
-Routes are JSON files in `appdata/routes/`. Edit them freely — add splits,
-reorder, rename — then press **Reload from disk**. A route you delete stays
-deleted; **Restore built-in routes** brings back any that are missing.
+The **Anri** split fires when you receive Anri's Straight Sword. Dark Souls III
+records picking an item up as an event flag of its own, so that is read directly
+rather than guessed at from where you are or what you have lost.
+
+### Building your own
+
+**Edit selected** on the control panel opens the route editor: reorder splits
+with the arrows, remove them with ✕, and add more from the boss list — which
+brings that boss's event flag with it, so the split advances on its own. Anything
+you type instead is a manual split and is marked as one. **Duplicate selected**
+is the safe way to start from a route you like.
+
+Routes are still plain JSON files in `appdata/routes/`, so hand-editing works
+just as well — press **Reload from disk** afterwards. A route you delete stays
+deleted; **Restore built-in routes** brings back any that are missing, including
+ones added in a newer version.
+
+**Renaming a route starts its personal bests over**, because they are filed under
+its name; the editor warns you first. Renaming a *split* does not — that is what
+custom names below are for.
 
 If a split ever fails to advance on its own, the **Split** hotkey moves it along.
 
@@ -187,6 +214,26 @@ see-through. Changes apply immediately, including in OBS.
 it, 1 to 30. The list scrolls through longer routes, so this sets the overlay's
 height rather than the route's length: set it to the route's full split count to
 show everything with no scrolling.
+
+**Clock size** is separate from **Size**, and multiplies on top of it. The clock
+is read at a glance from across a room; the split list is detail. Making the
+clock bigger should not cost the splits their space.
+
+**Show the attempt count** puts "attempt 214" beside the challenge name. It is
+counted per route and challenge, and goes up whenever a run starts. Set the
+number by hand under **Run → Attempts** if you are carrying a tally over from
+somewhere else.
+
+### Split names
+
+**Split names** on the control panel changes what the overlay calls each split:
+"Cinder" instead of "Soul of Cinder", "Twin Princes" instead of "Lothric,
+Younger Prince". **Use short names** fills in every boss at once, and any name
+you set yourself outranks the preset.
+
+Only the display changes. Personal bests are filed under the name in the route
+file, so renaming here never loses the history behind a boss — which is why this
+exists instead of editing the route.
 
 Every section of the control panel collapses, and remembers whether you left it
 open.
@@ -254,8 +301,9 @@ Known limitations:
 ## Credits
 
 DS3 memory layouts are documented by the reverse-engineering community. Pointer
-*facts* — signatures, offsets, and the boss event-flag table — were referenced
-from the open-source [SoulSplitter](https://github.com/FrankvdStam/SoulSplitter),
+*facts* — signatures, offsets, and the event-flag tables for boss defeats and
+item pickups — were referenced from the open-source
+[SoulSplitter](https://github.com/FrankvdStam/SoulSplitter),
 [darksoulsiii-practice-tool](https://github.com/veeenu/darksoulsiii-practice-tool),
 and community Cheat Engine tables, then re-implemented independently here. No
 code was copied from those (GPL and other-licensed) projects.

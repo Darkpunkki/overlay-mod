@@ -1,5 +1,87 @@
 # Changelog
 
+## 0.3.0
+
+Attempts, a route editor, custom split names, and a glitchless route that splits
+on Anri.
+
+### Added
+
+- **An attempt counter**, on the overlay beside the challenge name and on the
+  control panel. Counted per route *and* challenge — "my 300th No Hit attempt"
+  and "my 4th Speedrun of the same route" are separate tallies — and it goes up
+  whenever a run starts: loading into the world, resetting, or starting a fresh
+  character. Nothing shows until the first attempt.
+
+  **You can set it by hand.** Nobody starts using this on their first attempt,
+  and a counter that insists on starting from one is a counter you would ignore.
+
+- **A route editor**, on the control panel. Create a route, duplicate one,
+  rename it, delete it; reorder splits, remove them, and add them from a list of
+  every boss the build knows about — which brings the boss's event flag with it,
+  so the split advances on its own. Anything you type instead is a manual split
+  and says so.
+
+  Route files are still plain JSON in `appdata/routes/` and still hand-editable.
+  This is the same thing without the JSON.
+
+- **Custom split names.** Call Soul of Cinder "Cinder" and Lothric, Younger
+  Prince "Twin Princes". **Use short names** fills in every boss at once, and any
+  name you set yourself outranks the preset.
+
+  Only the display changes: personal bests are filed under the name in the route
+  file, so renaming here never loses the history behind a boss. That is exactly
+  why this exists instead of editing the route.
+
+- **A separate size for the clock**, on top of the overall size. The clock is
+  read from across a room and the split list is not, so scaling everything just
+  to get a bigger clock cost the space the splits needed.
+
+- **A new route: "Glitchless route, Anri"** — Gundyr, Vordt, **Anri**, Sage,
+  Deacons, Abyss Watchers, Wolnir, Pontiff, Aldrich, Yhorm, Dancer, Dragonslayer
+  Armour, Twin Princes, Soul of Cinder. All fourteen splits advance on their own.
+
+  **The Anri split fires when you receive Anri's Straight Sword.** Dark Souls III
+  records picking an item up as an event flag of its own — that is how the game
+  knows not to offer it twice — so this reads the exact moment you were going to
+  split on anyway, through the flag machinery that is already here and already
+  confirmed against a live game. No new memory reads were needed for it.
+
+  Existing installs get the route from **Restore built-in routes**, since routes
+  are only seeded into an empty folder.
+
+### Changed
+
+- **Dying counts as a hit, whatever killed you.** Falls and poison were being set
+  aside from the No Hit count wherever they landed — including when they landed
+  fatally, so falling to your death or letting a poisoning finish you left the
+  run reading as clean. The fatal blow now skips both classifiers and counts as
+  one hit, once. A survivable fall is still not a hit, and the ticks before a
+  fatal one are still poison; it is the killing blow that changes.
+
+  This is the settled convention among No-Hit runners, and it is the one reading
+  that cannot make an invalid run look valid.
+
+### Fixed
+
+- **`?scale=` and `?splits=` on the overlay URL work again.** The appearance
+  settings arrive a fraction of a second after the page reads its query string
+  and were overwriting it, which looks exactly like the parameter doing nothing.
+  A setting asked for by hand in the URL now wins.
+
+### Notes for anyone upgrading
+
+Nothing to do. Settings, personal bests and existing routes are untouched, and
+nothing is renamed until you ask for it.
+
+Two things worth knowing:
+
+- **Attempts start from zero**, because there was nothing to count before. Set
+  the number by hand under **Run → Attempts** if you are carrying a tally over.
+- **Renaming a route in the editor starts its personal bests over**, because
+  those are filed under the route's name. The editor warns before it happens.
+  Renaming a *split* does not — that is what custom split names are for.
+
 ## 0.2.4
 
 Two ways No Hit charged a hit for damage the player did not take.
