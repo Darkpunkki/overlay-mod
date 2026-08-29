@@ -169,6 +169,23 @@
     return { from, to: from + size };
   }
 
+  // The overlay is content-sized above a minimum width, and with the full boss
+  // names that minimum is what you see. When every name in the route fits in
+  // this many characters, the minimum is mostly empty plate, so it drops to a
+  // narrower one. 13 covers the whole short-name preset — the longest name it
+  // leaves untouched is "Nameless King".
+  //
+  // The whole route is judged, not the visible rows, so scrolling the one long
+  // name into view cannot change the overlay's width mid-run.
+  const COMPACT_NAME_CHARS = 13;
+
+  function renderWidth(state) {
+    const compact =
+      state.splits.length > 0 &&
+      state.splits.every((s) => (s.label || s.name).length <= COMPACT_NAME_CHARS);
+    dom.overlay.classList.toggle("overlay--compact", compact);
+  }
+
   // A split shows whichever metric its profile is ranked by, against that
   // split's own best. Comparing hits on a time-ranked run tells you nothing.
   function splitMetric(split, metric) {
@@ -299,6 +316,7 @@
     dom.profileName.textContent = state.profileName || "";
 
     renderAttempts(state);
+    renderWidth(state);
     renderSplits(state);
     renderTotals(state);
     renderStatus(state);

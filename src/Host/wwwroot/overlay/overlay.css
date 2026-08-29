@@ -62,6 +62,14 @@ html, body {
   text-shadow: var(--om-shadow);
 }
 
+/* The width above is a floor sized for the full boss names. When every name in
+   the route is short — the short-name preset at work, or a route written that
+   way — the same floor is mostly empty plate, so the overlay narrows and takes
+   that much less of the capture. overlay.js sets the class by looking at the
+   whole route, not the rows on screen, so the width holds still while the list
+   scrolls. */
+.overlay--compact { min-width: 12.5rem; }
+
 .run,
 .splits,
 .totals,

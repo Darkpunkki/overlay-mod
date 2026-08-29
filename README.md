@@ -231,6 +231,10 @@ somewhere else.
 Younger Prince". **Use short names** fills in every boss at once, and any name
 you set yourself outranks the preset.
 
+Short names also earn their space back: when every name in the route is short,
+the overlay narrows to match, so it covers less of your capture. One long name
+anywhere in the route keeps the full width.
+
 Only the display changes. Personal bests are filed under the name in the route
 file, so renaming here never loses the history behind a boss — which is why this
 exists instead of editing the route.

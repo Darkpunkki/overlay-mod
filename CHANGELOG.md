@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+An overlay that narrows when every split name is short.
+
+Upgrading changes nothing about stored history: personal bests keep their
+meaning, and a run parked by an earlier version resumes exactly as it was.
+
+### Added
+
+- **The overlay narrows when every split name is short.** Its width has a floor
+  sized for the full boss names; once every name in the route is short — **Use
+  short names**, or names of your own — that floor is mostly empty plate, so it
+  drops and the overlay covers less of the capture. Judged on the whole route
+  rather than the rows on screen, so the width never changes mid-run as the
+  list scrolls.
+
 ## 0.3.0
 
 Attempts, a route editor, custom split names, and a glitchless route that splits

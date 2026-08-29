@@ -460,6 +460,13 @@ Decisions not yet made. Flagged here rather than silently assumed.
   That keeps the settings out of every frame at 30Hz while still landing a
   restyle in OBS immediately — and means the Browser Source URL never has to
   change.
+- **The overlay narrows when every name in the route is short.** Its width is
+  content-driven above a minimum, and the minimum exists for the full boss
+  names; under the short-name preset it is mostly empty plate. The judgement is
+  a character count (≤ 13, which covers the whole preset) over *every* split in
+  the route rather than a measurement of the visible rows — one long name
+  anywhere keeps the wide floor everywhere, because a width that changes as the
+  list scrolls past that name would wobble in the middle of a recording.
 - **Personal bests are per-split as well as per-run** ("gold splits"), so the
   overlay can show progress against the best each boss has *ever* been rather
   than only against one best run.
