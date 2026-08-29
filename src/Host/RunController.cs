@@ -57,6 +57,16 @@ public sealed class RunController
     private PersonalBests _bests;
     private AttemptCount _attempts;
 
+    /// <summary>
+    /// The bests as they stood before the current run banked anything, so a
+    /// manual hit correction on an already-completed split can re-file its
+    /// banked best as if the corrected count had been true all along. After a
+    /// host restart mid-run this is at best what the store held on recovery —
+    /// splits banked by the earlier session are behind it, and a correction can
+    /// no longer raise those. Best-effort is the honest ceiling there.
+    /// </summary>
+    private PersonalBests _baselineBests = PersonalBests.Empty;
+
     /// <summary>Set whenever contact with the game is lost, forcing a resume-or-restart decision.</summary>
     private bool _awaitingResumeDecision = true;
 
@@ -97,7 +107,7 @@ public sealed class RunController
         _routeFile = (saved is null ? null : _routes.Find(saved.RouteName)) ?? _routes.Default;
         _profile = ChallengeProfile.For(saved?.Challenge ?? _routeFile.DefaultChallenge);
         _route = _routeFile.ToRoute(_profile);
-        _bests = _records.BestsFor(_route.Name);
+        _bests = _baselineBests = _records.BestsFor(_route.Name);
         _attempts = _attemptStore.Get(_route.Name, _profile.Type);
 
         // A run left unfinished by a previous session is picked up here; whether
@@ -170,7 +180,7 @@ public sealed class RunController
             _routeFile = file;
             _profile = ChallengeProfile.For(challenge);
             _route = _routeFile.ToRoute(_profile);
-            _bests = _records.BestsFor(_route.Name);
+            _bests = _baselineBests = _records.BestsFor(_route.Name);
             _attempts = _attemptStore.Get(_route.Name, _profile.Type);
 
             _tracker.Reset();
@@ -210,7 +220,7 @@ public sealed class RunController
 
             _routeFile = file;
             _route = file.ToRoute(_profile);
-            _bests = _records.BestsFor(_route.Name);
+            _bests = _baselineBests = _records.BestsFor(_route.Name);
             _attempts = _attemptStore.Get(_route.Name, _profile.Type);
             _settings.Save(new Selection(file.Name, _profile.Type));
 
@@ -391,7 +401,7 @@ public sealed class RunController
     {
         _tracker.Reset();
         _tracker.Start(_route, snapshot);
-        _bests = _records.BestsFor(_route.Name);
+        _bests = _baselineBests = _records.BestsFor(_route.Name);
         _attempts = _attemptStore.Begin(_route.Name, _profile.Type);
         _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
         Checkpoint(force: true);
@@ -494,6 +504,50 @@ public sealed class RunController
             _lastCheckpointKey = (-1, -1, -1, RunPhase.NotStarted);
             _awaitingResumeDecision = false;
         }
+    }
+
+    /// <summary>
+    /// Manually correct a split's hit count — the detectors are heuristics and
+    /// the memory read can miss a drop, so the player gets the last word. The
+    /// tracker owns the rules (a run in progress, a split it has reached, never
+    /// below zero); this adds what the tracker cannot know about: a completed
+    /// split has already banked its per-boss best, and that bank must move with
+    /// the correction or a number that was never earned stands as the target.
+    /// </summary>
+    public bool AdjustHits(int splitIndex, int delta)
+    {
+        lock (_gate)
+        {
+            if (!_tracker.AdjustHits(splitIndex, delta)) return false;
+
+            var split = _tracker.Splits[splitIndex];
+            if (split.Completed) RebankHits(split.Name);
+
+            Checkpoint(force: true);
+            _log.LogInformation(
+                "Hits on split {Split} corrected by {Delta}, to {Hits}.", split.Name, delta, split.Hits);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Re-file one split's banked hit best as if the corrected count had been
+    /// true when it completed: the pre-run best folded with every completed
+    /// take on that name this run. Folding over all of them matters when a
+    /// route visits the same name twice — they share one banked entry, and
+    /// correcting one visit must not overwrite what the other legitimately set.
+    /// </summary>
+    private void RebankHits(string splitName)
+    {
+        int? corrected = _baselineBests.SplitHits(splitName);
+        foreach (var s in _tracker.Splits)
+            if (s.Completed && s.Name == splitName)
+                corrected = corrected is { } c ? Math.Min(c, s.Hits) : s.Hits;
+
+        if (corrected is not { } value) return;
+
+        _records.CorrectSplitHits(_route.Name, splitName, value);
+        _bests = _records.BestsFor(_route.Name);
     }
 
     public OverlayState Project(GameSnapshot snapshot)

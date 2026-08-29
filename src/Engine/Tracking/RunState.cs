@@ -36,7 +36,11 @@ public sealed record SplitState(
     // back as zero — its poison ticks stay counted as hits, exactly as they were
     // while that version was running. Resuming does not rewrite history.
     int ApproachTickDamage = 0,
-    int BossTickDamage = 0)
+    int BossTickDamage = 0,
+
+    // Added in 0.4.0: the player's manual correction to the hit count. Zero in
+    // a run parked by an earlier version, which is simply "never corrected".
+    int HitAdjustment = 0)
 {
     /// <summary>
     /// What 0.1.0 called hits. It counted every drop in health, which is damage

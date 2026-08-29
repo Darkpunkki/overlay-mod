@@ -150,6 +150,37 @@ public class JsonRecordStoreTests : IDisposable
         Assert.Equal(1, new JsonRecordStore(Path_).BestsFor("r").SplitHits("Iudex Gundyr"));
     }
 
+    // --- manual corrections to a banked hit best ---
+
+    [Fact]
+    public void CorrectingBankedHits_CanRaiseThem_WhichAFoldNeverCould()
+    {
+        var store = new JsonRecordStore(Path_);
+        store.RecordSplit("r", Split("Iudex Gundyr", 30_000, 1, 0));
+
+        // The player says two hits landed, not one. RecordSplit would keep the
+        // flattering minimum; the correction replaces it.
+        store.CorrectSplitHits("r", "Iudex Gundyr", 2);
+
+        var bests = store.BestsFor("r");
+        Assert.Equal(2, bests.SplitHits("Iudex Gundyr"));
+
+        // Only hits moved; the rest of the banked record stands.
+        Assert.Equal(30_000, bests.SplitIgtMs("Iudex Gundyr"));
+
+        // And the correction is on disk, not only in memory.
+        Assert.Equal(2, new JsonRecordStore(Path_).BestsFor("r").SplitHits("Iudex Gundyr"));
+    }
+
+    [Fact]
+    public void CorrectingASplitThatWasNeverBanked_DoesNothing()
+    {
+        var store = new JsonRecordStore(Path_);
+        store.CorrectSplitHits("r", "Iudex Gundyr", 2);
+
+        Assert.Null(store.BestsFor("r").SplitHits("Iudex Gundyr"));
+    }
+
     [Fact]
     public void ExistingHistoryWithoutStoredSplitBestsIsMigrated()
     {

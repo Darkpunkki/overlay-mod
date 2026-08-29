@@ -25,4 +25,15 @@ public interface IRecordStore
     /// something for a run that was actually completed.
     /// </summary>
     void RecordSplit(string routeName, SplitRecord split);
+
+    /// <summary>
+    /// Overwrite the banked hit best for one split, leaving its other metrics
+    /// alone. This exists for manual corrections: <see cref="RecordSplit"/> only
+    /// folds downwards, and a correction must be able to <em>raise</em> a best
+    /// that was banked from a miscounted split — otherwise an unearned number
+    /// sits on screen as the target forever. The caller owns folding the
+    /// corrected count against whatever baseline it holds; this is a plain set.
+    /// Does nothing when the split has never been banked.
+    /// </summary>
+    void CorrectSplitHits(string routeName, string splitName, int hits);
 }

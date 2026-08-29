@@ -410,6 +410,17 @@ run.MapPost("/start", (RunController rc, ISnapshotSource src) =>
 run.MapPost("/split", (RunController rc) => { rc.Split(); return Results.Ok(new { split = true }); });
 run.MapPost("/reset", (RunController rc) => { rc.Reset(); return Results.Ok(new { reset = true }); });
 
+// Manual hit corrections, for when a detector called a real hit something else
+// — or a hit never registered at all. Hits only: damage is measured, not
+// guessed, so there is nothing there to correct.
+run.MapPost("/hits", (AdjustHitsRequest body, RunController rc) =>
+    rc.AdjustHits(body.SplitIndex, body.Delta)
+        ? Results.Ok(new { adjusted = true })
+        : Results.BadRequest(new
+        {
+            error = "Only a split the run in progress has reached can be corrected, and hits cannot go below zero.",
+        }));
+
 var source = app.Services.GetRequiredService<ISnapshotSource>();
 var selected = app.Services.GetRequiredService<RunController>().Current;
 
@@ -472,6 +483,9 @@ internal sealed record DeleteRouteRequest(string? Name);
 internal sealed record NamesRequest(Dictionary<string, string>? Names);
 
 internal sealed record AttemptsRequest(int Started, int Finished);
+
+/// <summary>A manual hit correction: which split, and by how much (either sign).</summary>
+internal sealed record AdjustHitsRequest(int SplitIndex, int Delta);
 
 /// <summary>
 /// Body of a tracking-settings update. Both halves are optional: the control

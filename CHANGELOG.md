@@ -2,12 +2,21 @@
 
 ## 0.4.0
 
-An overlay that narrows when every split name is short.
+Manual hit corrections, and an overlay that narrows when every split name is
+short.
 
 Upgrading changes nothing about stored history: personal bests keep their
 meaning, and a run parked by an earlier version resumes exactly as it was.
 
 ### Added
+
+- **Manual hit corrections**, under **Run** on the control panel: every split
+  the run has reached, with a **+** and **−** beside it. For when a detector
+  called a real hit a fall, or a hit never registered at all — the player gets
+  the last word. Correcting a split whose boss is already dead re-files that
+  boss's banked best as if the count had been right when it died, so a miscount
+  never stands as an unbeatable target. Hits only: damage is measured, not
+  guessed, so there is nothing there to correct.
 
 - **The overlay narrows when every split name is short.** Its width has a floor
   sized for the full boss names; once every name in the route is short — **Use

@@ -476,6 +476,18 @@ Decisions not yet made. Flagged here rather than silently assumed.
   opposite**: they only come from a finished run, because a total from an
   abandoned attempt is not comparable to one from a completed one. The two are
   stored separately for that reason — `splitBests` alongside `runs`.
+- **Hit counts can be corrected by hand — and only hit counts.** The fall and
+  poison classifiers are heuristics and the memory read can miss a drop, so the
+  player gets the last word on what No Hit says: a per-split +/− on the control
+  panel, for the run in progress only. Damage is deliberately out of reach — it
+  is measured rather than guessed, and a correction that could invent or erase a
+  health drop would hand No Damage exactly the guesswork it is valued for not
+  having. Correcting an already-completed split re-files its banked best as the
+  pre-run best folded with every completed take on that name this run;
+  `CorrectSplitHits` on the store is a plain set, because a fold can only lower
+  and an upward correction must be able to raise a bank that was wrong. The
+  pre-run baseline is captured at run start, so after a host restart mid-run the
+  re-bank is best-effort against whatever the store held on recovery.
 - **Routes are JSON files in `appdata/routes/`**, seeded on first run and meant
   to be hand-edited. Seeding happens only when the directory has no routes at
   all — per-missing-file seeding would resurrect a route the user deliberately

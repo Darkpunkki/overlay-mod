@@ -115,6 +115,21 @@ public sealed class JsonRecordStore : IRecordStore
         }
     }
 
+    public void CorrectSplitHits(string routeName, string splitName, int hits)
+    {
+        lock (_gate)
+        {
+            // A split that was never banked has nothing standing to correct. The
+            // live run holds the corrected count; it banks normally on completion.
+            if (!_splitBests.TryGetValue(routeName, out var forRoute)) return;
+            if (!forRoute.TryGetValue(splitName, out var current)) return;
+            if (current.Hits == hits) return;
+
+            forRoute[splitName] = current with { Hits = hits };
+            Save();
+        }
+    }
+
     private void FoldRun(RunRecord run)
     {
         var previous = _runBests.TryGetValue(run.RouteName, out var b) ? b : RunBest.None;

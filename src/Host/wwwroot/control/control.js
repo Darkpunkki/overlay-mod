@@ -47,6 +47,7 @@
 
     names: el("names"),
     atCount: el("atCount"),
+    hitAdjusts: el("hitAdjusts"),
   };
 
   // The /api/routes payload: what is selected, every route with its splits, the
@@ -766,6 +767,76 @@
     }
   });
 
+  // --- hit corrections ---
+  //
+  // One row per split the run has reached, with the counted hits and a button
+  // in each direction. Rendered from the same stream as the live facts — but
+  // the stream ticks at 30Hz, and rebuilding buttons that often would tear one
+  // out from under the click aimed at it. So the rows are rebuilt only when
+  // what they show has actually changed.
+
+  let hitRowsKey = "";
+
+  async function adjustHits(splitIndex, delta, name) {
+    try {
+      await post("/api/run/hits", { splitIndex, delta });
+      toast(delta > 0 ? `Hit added to ${name}` : `Hit removed from ${name}`);
+    } catch (err) {
+      toast(`Could not correct hits: ${err.message}`);
+    }
+  }
+
+  function renderHitAdjusts(state) {
+    const running = state.phase === "Running";
+    const reached = running ? state.splits.slice(0, state.activeIndex + 1) : [];
+
+    const key = JSON.stringify(reached.map((s) => [s.label || s.name, s.hits]));
+    if (key === hitRowsKey) return;
+    hitRowsKey = key;
+
+    if (!reached.length) {
+      dom.hitAdjusts.replaceChildren(Object.assign(document.createElement("p"), {
+        className: "hint",
+        textContent: "Nothing to correct — no run is in progress.",
+      }));
+      return;
+    }
+
+    dom.hitAdjusts.replaceChildren(...reached.map((s, i) => {
+      const row = document.createElement("div");
+      row.className = "adjustrow";
+      row.classList.toggle("adjustrow--active", i === state.activeIndex);
+
+      const shown = s.label || s.name;
+
+      const name = document.createElement("span");
+      name.className = "adjustrow__name";
+      name.textContent = shown;
+
+      const count = document.createElement("span");
+      count.className = "adjustrow__count";
+      count.textContent = `${s.hits} hit${s.hits === 1 ? "" : "s"}`;
+
+      row.append(name, count);
+
+      for (const [label, title, delta, disabled] of [
+        ["−", "Remove a hit", -1, s.hits === 0],
+        ["+", "Add a hit", 1, false],
+      ]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "iconbtn";
+        button.textContent = label;
+        button.title = title;
+        button.disabled = disabled;
+        button.addEventListener("click", () => adjustHits(i, delta, shown));
+        row.append(button);
+      }
+
+      return row;
+    }));
+  }
+
   // --- recent damage, for checking the detectors' calls ---
 
   // Kind comes from the engine's enum. "Pending" means small enough to be a
@@ -891,6 +962,7 @@
     // The stream is the live source: an attempt begins when the host says so,
     // not when this page last asked.
     showAttempts(state.attempts);
+    renderHitAdjusts(state);
   }
 
   dom.overlayUrl.textContent = `${window.location.origin}/overlay/`;

@@ -163,6 +163,20 @@ call it made, and lets you move the thresholds or switch either one off. Off
 means No Hit counts exactly what No Damage counts, which is the honest setting if
 it is misjudging your route.
 
+### Fixing the count by hand
+
+However the thresholds are set, some edge will slip through eventually. **Hit
+corrections**, under **Run** on the control panel, lists every split the run has
+reached with a **+** and **−** beside it: add the hit the mod missed, remove the
+one it should not have counted. The overlay follows immediately — and so does
+the personal best for that boss, even after the boss is dead: the banked best is
+re-filed as if the count had been right when it died, so a miscount never stands
+as an unbeatable target.
+
+Corrections apply to the run in progress, and to the hit count only. Damage is
+measured rather than guessed, so there is nothing there to correct — and a
+finished run is history.
+
 ### Personal bests
 
 Two kinds, and they are earned differently:
@@ -279,7 +293,7 @@ executable, or **Open log file** on the tray icon.
 | Timer runs but nothing counts | Check **Health** under **Now** on the control panel. Real numbers while you play means the reading works; `0 / 0` while standing in a level means the memory offsets are wrong for your game version, and no amount of playing will move the counters. Tested against **1.15.2.0**; older patches move these offsets |
 | A boss kill did not split | `http://127.0.0.1:8777/api/diagnostics?flag=<id>` reports every step of the lookup. Split manually with `Ctrl+Alt+D` meanwhile |
 | Hotkeys do nothing | Another app may own the combination; the control panel marks unbound ones |
-| A hit was counted as a fall or as poison, or missed | **What counts as a hit → Recent damage** on the control panel shows what was called and why, and what each cost. Only No Hit is affected |
+| A hit was counted as a fall or as poison, or missed | **What counts as a hit → Recent damage** on the control panel shows what was called and why, and what each cost. Only No Hit is affected. Put the number right with **Run → Hit corrections** |
 | Poison still counts as hits | The line above the damage list says what the ceiling works out to in HP. Compare it against the `HP` column and raise **Bites no bigger than** past your ticks. Make sure you are on **0.2.3 or later** — in 0.2.2 this never worked at all |
 
 Known limitations:

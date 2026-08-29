@@ -62,6 +62,17 @@ public sealed class SplitResult
     public SegmentResult Boss { get; } = new();
     public bool Completed { get; internal set; }
 
+    /// <summary>
+    /// Manual correction to the hit count, in either direction. The detectors
+    /// are heuristics and the memory read can miss a drop outright, so the
+    /// player gets the last word — see <see cref="RunTracker.AdjustHits"/>.
+    ///
+    /// Kept at the split level rather than inside a segment: a correction says
+    /// "this split's count is wrong by N", and the player making it has no way
+    /// to know which segment the miscount landed in.
+    /// </summary>
+    public int HitAdjustment { get; internal set; }
+
     public SplitResult(string name, bool isBoss)
     {
         Name = name;
@@ -71,7 +82,7 @@ public sealed class SplitResult
     public int Damage => Approach.Damage + Boss.Damage;
     public int FallDamage => Approach.FallDamage + Boss.FallDamage;
     public int TickDamage => Approach.TickDamage + Boss.TickDamage;
-    public int Hits => Approach.Hits + Boss.Hits;
+    public int Hits => Approach.Hits + Boss.Hits + HitAdjustment;
     public int Deaths => Approach.Deaths + Boss.Deaths;
     public int IgtMs => Approach.IgtMs + Boss.IgtMs;
 

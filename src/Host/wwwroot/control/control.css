@@ -304,6 +304,26 @@ code { background: #000; padding: .1rem .3rem; border-radius: .2rem; font-size: 
 .check { display: flex; align-items: center; gap: .5rem; font-size: .875rem; }
 .check input { accent-color: var(--accent); width: 1rem; height: 1rem; }
 
+/* Hit corrections: one row per split the run has reached. */
+
+.adjusts { display: flex; flex-direction: column; gap: .25rem; }
+
+/* name | counted hits | remove | add */
+.adjustrow {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: .5rem;
+  align-items: center;
+  border: 1px solid var(--edge);
+  border-radius: .35rem;
+  padding: .3rem .55rem;
+  font-size: .875rem;
+}
+
+.adjustrow--active { border-color: color-mix(in srgb, var(--accent) 45%, var(--edge)); }
+.adjustrow__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adjustrow__count { font-variant-numeric: tabular-nums; color: var(--dim); font-size: .8125rem; }
+
 /* Recent damage, for checking what the two detectors actually called. */
 .events { display: flex; flex-direction: column; gap: .25rem; max-height: 16rem; overflow-y: auto; }
 

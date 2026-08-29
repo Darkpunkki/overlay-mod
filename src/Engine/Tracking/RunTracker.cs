@@ -185,6 +185,32 @@ public sealed class RunTracker
         if (Phase == RunPhase.Running) AdvanceSplit();
     }
 
+    /// <summary>
+    /// Manually correct a split's hit count, in either direction. Falls and
+    /// poison are heuristics and the memory read can miss a drop outright, so
+    /// the player gets the last word on what No Hit says.
+    ///
+    /// Only hits move. Damage is measured rather than guessed, so there is
+    /// nothing there to correct — and a correction that invented or erased a
+    /// health drop would put No Damage at the mercy of the same judgement calls
+    /// this exists to fix in No Hit.
+    ///
+    /// Returns false — changing nothing — when no run is in progress, when the
+    /// split has not been reached yet (hits the run has not taken cannot be
+    /// corrected), or when the correction would take the count below zero.
+    /// </summary>
+    public bool AdjustHits(int splitIndex, int delta)
+    {
+        if (Phase != RunPhase.Running) return false;
+        if (splitIndex < 0 || splitIndex > _activeIndex || splitIndex >= _splits.Count) return false;
+
+        var split = _splits[splitIndex];
+        if (split.Hits + delta < 0) return false;
+
+        split.HitAdjustment += delta;
+        return true;
+    }
+
     public void Update(GameSnapshot snapshot, IFlagSource? flags = null)
     {
         if (Phase != RunPhase.Running) return;
@@ -426,7 +452,7 @@ public sealed class RunTracker
                 s.Name, s.IsBoss, s.Completed,
                 s.Approach.IgtMs, s.Approach.Damage, s.Approach.FallDamage, s.Approach.Deaths,
                 s.Boss.IgtMs, s.Boss.Damage, s.Boss.FallDamage, s.Boss.Deaths,
-                s.Approach.TickDamage, s.Boss.TickDamage));
+                s.Approach.TickDamage, s.Boss.TickDamage, s.HitAdjustment));
         }
 
         return new RunState(_route.Name, _runStartIgt, _currentIgt, _activeIndex, Phase, splits);
@@ -460,6 +486,7 @@ public sealed class RunTracker
             split.Boss.FallDamage = s.BossFallDamage;
             split.Boss.TickDamage = s.BossTickDamage;
             split.Boss.Deaths = s.BossDeaths;
+            split.HitAdjustment = s.HitAdjustment;
             _splits.Add(split);
         }
 
